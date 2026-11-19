@@ -33,7 +33,8 @@ EXT
   rm -f "$CERT_DIR/$name.csr" "$CERT_DIR/$name.ext"
 }
 
-make_cert "postgres-server" "db" "serverAuth" "DNS:db,DNS:localhost,IP:127.0.0.1"
+# DB_EXTRA_SANS="DNS:rp-db.lan,IP:10.0.0.5" adds names for LXC/Proxmox setups that do not use the hostname `db`.
+make_cert "postgres-server" "db" "serverAuth" "DNS:db,DNS:localhost,IP:127.0.0.1${DB_EXTRA_SANS:+,$DB_EXTRA_SANS}"
 make_cert "api-client" "reflectopatronus_app" "clientAuth" "DNS:reflectopatronus-api"
 make_cert "api-https" "localhost" "serverAuth" "DNS:localhost,IP:127.0.0.1"
 

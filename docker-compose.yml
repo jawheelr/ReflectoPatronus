@@ -24,14 +24,16 @@ services:
       - database
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health/live"]
+      # The aspnet image has no curl/wget; bash is present. Checks /health/live only (liveness, not readiness).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/live HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"]
       interval: 20s
       timeout: 3s
       retries: 3
 
   db:
     build:
-      context: ./docker/postgres
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-reflectopatronus}
       POSTGRES_USER: ${POSTGRES_USER:-reflectopatronus_admin}

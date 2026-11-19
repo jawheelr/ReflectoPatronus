@@ -1,6 +1,8 @@
+# Build context is the repository root (see docker-compose.yml) so config is shared with the LXC deployment.
 FROM postgres:17-bookworm
-COPY --chmod=0644 pg_hba.conf /etc/postgresql/pg_hba.conf
-COPY --chmod=0755 docker-entrypoint-wrapper.sh /usr/local/bin/reflectopatronus-entrypoint.sh
-RUN chmod 755 /usr/local/bin/reflectopatronus-entrypoint.sh
+COPY --chmod=0644 deploy/common/pg_hba.conf /etc/reflectopatronus/pg_hba.conf
+COPY --chmod=0644 deploy/common/rp-postgresql.conf /etc/reflectopatronus/conf.d/10-reflectopatronus.conf
+COPY --chmod=0755 deploy/common/install-pki.sh /usr/local/bin/rp-install-pki.sh
+COPY --chmod=0755 docker/postgres/docker-entrypoint-wrapper.sh /usr/local/bin/reflectopatronus-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/reflectopatronus-entrypoint.sh"]
-CMD ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf", "-c", "ssl=on", "-c", "ssl_min_protocol_version=TLSv1.3", "-c", "ssl_ca_file=/var/lib/postgresql/certs/ca.crt", "-c", "ssl_cert_file=/var/lib/postgresql/certs/server.crt", "-c", "ssl_key_file=/var/lib/postgresql/certs/server.key"]
+CMD ["postgres"]

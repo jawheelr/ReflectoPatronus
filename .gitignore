@@ -13,3 +13,6 @@ legacy/*
 *.bak
 *.mdf
 *.ldf
+
+# Build output
+dist/
