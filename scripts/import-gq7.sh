@@ -16,7 +16,7 @@ docker build -q -t rp-importer "$ROOT/tools/importer" >/dev/null
 mkdir -p "$ROOT/out"
 cid="$(docker create --network reflectopatronus_database \
   -e PGHOST=db -e PGPORT=5432 -e PGUSER="$POSTGRES_USER" -e PGPASSWORD="$POSTGRES_PASSWORD" -e PGDATABASE="$POSTGRES_DB" \
-  -e MSSQL_HOST="$MSSQL_IP" -e MSSQL_PASSWORD \
+  -e MSSQL_HOST="$MSSQL_IP" -e MSSQL_PASSWORD ${IMPORT_TZ:+-e IMPORT_TZ} \
   -v "$ROOT/certs:/certs:ro" -v "$ROOT/out:/out" rp-importer "$@")"
 docker network connect bridge "$cid" 2>/dev/null || true
 trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT

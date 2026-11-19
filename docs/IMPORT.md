@@ -12,7 +12,7 @@ export MSSQL_PASSWORD=...                # sa password of the SQL Server contain
 ./scripts/import-gq7.sh --dry-run        # full run incl. reconciliation, then ROLLBACK (~1 min, skips attachments)
 ./scripts/import-gq7.sh --reset          # real import; --reset wipes previously imported data first
 ```
-Options: `--skip-attachments`, `--skip-audit-log`, `--tz` (zone of GQ7's naive timestamps; default America/Chicago, **confirm with the shop**). The report is written to `out/import-report.json` (git-ignored). Exit code 1 means an unexplained discrepancy.
+Options: `--skip-attachments`, `--skip-audit-log`, `--tz ZONE` or env `IMPORT_TZ=ZONE` (IANA zone GQ7 recorded its naive timestamps in; default America/Chicago, **confirm with the shop**; it only affects timestamps, not plain dates). The report is written to `out/import-report.json` (git-ignored). Exit code 1 means an unexplained discrepancy.
 
 ## What it guarantees
 - **Everything is accounted for:** for every source table `source = loaded + quarantined + skipped`, or the run fails. Quarantined rows keep their full content as JSON in `import_quarantine`.

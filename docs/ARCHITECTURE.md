@@ -1,9 +1,20 @@
 # Architecture decisions (initial)
 
-## Application boundary
-- React web client and native SwiftUI iOS client call the same versioned REST API.
+## System shape: central server, API-only clients
+One central server (Docker or Proxmox LXC, see DEPLOYMENT.md) runs PostgreSQL and the API. **Every client talks to the API; none talks to PostgreSQL** (unlike GQ7, whose desktop clients connected straight to SQL Server). Logins, permissions and the totals rules live in the API.
+
+| Client | Technology | Notes |
+|---|---|---|
+| Web | React + TypeScript | Browser access; also the UI the desktop app wraps |
+| Desktop app (installed on each computer) | Same React UI in a Tauri shell | Thin client of the same API; one UI codebase for web and desktop. Electron only if a Tauri limitation forces it |
+| iPhone / iPad | Native SwiftUI, one app with an adaptive iPad layout | Offline field work: local store plus a conflict-aware sync queue |
+
+Decisions that follow from this:
+- **API first.** All clients depend on one versioned REST contract published as OpenAPI (`/api/v1`). The TypeScript and Swift clients are generated from it. No client is built before the API slice it needs exists.
+- **Per-device sign-in.** Each user signs in on each device. Short-lived access tokens plus refresh tokens that are bound to a device record, so a lost laptop or iPad can be revoked without affecting anyone else. User authentication is separate from the API's own database mTLS identity. Passwords are never imported from GQ7.
+- **Time zones.** Instants are stored as `timestamptz` and sent as UTC. Each client renders them in the user's chosen zone: a per-user setting held on the server (default: the device's zone) with a company default. Plain dates (document dates) are never shifted. The importer's `--tz` is unrelated: it only states what zone GQ7 recorded its naive timestamps in.
 - Only the API and explicitly authorized migration/backup workers access PostgreSQL.
-- PostgreSQL's port remains private to the Docker network.
+- PostgreSQL's port remains private (internal Docker network / private Proxmox bridge with firewall rules).
 
 ## Database security
 - PostgreSQL requires TLS 1.3 or later.
