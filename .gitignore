@@ -16,3 +16,9 @@ legacy/*
 
 # Build output
 dist/
+
+# Importer reports (contain row-level legacy data references)
+out/
+
+__pycache__/
+*.pyc

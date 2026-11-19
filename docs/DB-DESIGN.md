@@ -36,7 +36,7 @@ GQ7's `InvoiceTotals` view uses `Lin_A_Kind <> 'LAA'`, which is NULL (unknown) f
 - `bill_to_customer_id` is NULL when it equals the customer (true for all but 3 documents).
 - AR `purpose=3` rows are paired transfers between two invoices; `related_document_id` holds the counterpart.
 - Line part codes are snapshots (40 codes are not in the parts table), not FKs.
-- `part_price` FK to `part_thickness`: 2,202 of 3,228 GQ7 price rows point at a missing thickness row. Those are quarantined; **ask the shop whether pricing is complete** after import.
+- `part_price` FK to `part_thickness`: 2,214 of 3,228 GQ7 price rows point at a missing thickness row. The importer dry run shows the 1,014 that load are exactly 338 thicknesses x 3 price categories, i.e. pricing is complete and the rest are stale leftovers (kept in quarantine).
 
 ## Not imported, on purpose
 `GQUSER.User_Password` (set new credentials), SMTP/Qix passwords and the Kust token, `Cust_CreditCard` (empty; never store card numbers), dot-matrix printer config (`GQPrinter`), `GQUserLog` is kept only as `legacy_audit_log`. Unmodelled single-row config (QuickBooks mapping, enterprise row) goes to `legacy_config` JSON.

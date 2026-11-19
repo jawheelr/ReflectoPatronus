@@ -6,6 +6,7 @@ Replacement for GlassQuote 7 (flat-glass quoting/invoicing): PostgreSQL 17 + ASP
 |---|---|
 | [docs/GQ7-SCHEMA.md](docs/GQ7-SCHEMA.md) | What is inside the GlassQuote 7 database (structure only) |
 | [docs/DB-DESIGN.md](docs/DB-DESIGN.md) | The PostgreSQL model, what changed from GQ7 and why, open questions |
+| [docs/IMPORT.md](docs/IMPORT.md) | Running the GQ7 importer, guarantees, first dry-run results |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker and LXC setup, converting between them, what is tested |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/STARTER-README.md](docs/STARTER-README.md) | Original scaffold notes (TLS/mTLS/PQC gate) |
 
