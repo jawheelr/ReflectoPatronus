@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CERT_DIR="$ROOT_DIR/certs"
+mkdir -p "$CERT_DIR"
+chmod 700 "$CERT_DIR"
+
+if [[ -e "$CERT_DIR/ca.key" ]]; then
+  echo "Certificates already exist in $CERT_DIR; refusing to overwrite."
+  echo "Remove the development certs directory only if you intend to regenerate them."
+  exit 1
+fi
+
+# Development-only ECDSA certificates. PQC key exchange is a separate TLS capability
+# and is NOT provided merely by using these classical certificate signatures.
+openssl ecparam -name prime256v1 -genkey -noout -out "$CERT_DIR/ca.key"
+openssl req -x509 -new -nodes -key "$CERT_DIR/ca.key" -sha256 -days 3650 \
+  -subj "/CN=ReflectoPatronus Development CA" -out "$CERT_DIR/ca.crt"
+
+make_cert() {
+  local name="$1" cn="$2" ext="$3" san="$4"
+  openssl ecparam -name prime256v1 -genkey -noout -out "$CERT_DIR/$name.key"
+  openssl req -new -key "$CERT_DIR/$name.key" -subj "/CN=$cn" -out "$CERT_DIR/$name.csr"
+  cat > "$CERT_DIR/$name.ext" <<EXT
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=$ext
+subjectAltName=$san
+EXT
+  openssl x509 -req -in "$CERT_DIR/$name.csr" -CA "$CERT_DIR/ca.crt" -CAkey "$CERT_DIR/ca.key" \
+    -CAcreateserial -out "$CERT_DIR/$name.crt" -days 825 -sha256 -extfile "$CERT_DIR/$name.ext"
+  rm -f "$CERT_DIR/$name.csr" "$CERT_DIR/$name.ext"
+}
+
+make_cert "postgres-server" "db" "serverAuth" "DNS:db,DNS:localhost,IP:127.0.0.1"
+make_cert "api-client" "reflectopatronus_app" "clientAuth" "DNS:reflectopatronus-api"
+make_cert "api-https" "localhost" "serverAuth" "DNS:localhost,IP:127.0.0.1"
+
+chmod 600 "$CERT_DIR"/ca.key "$CERT_DIR"/postgres-server.key
+# Development-only: the API container runs as a non-root UID and needs to read this bind-mounted key.
+# Do not use this permission pattern for production; use a secret mount with controlled ownership instead.
+chmod 644 "$CERT_DIR"/api-client.key
+chmod 644 "$CERT_DIR"/*.crt
+
+echo "Development certificates created in $CERT_DIR"
+echo "Do not use these certificates in production. PostgreSQL will copy its server key and set required ownership/mode at container startup."

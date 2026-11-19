@@ -1,0 +1,15 @@
+.env
+certs/*
+!certs/.gitkeep
+**/bin/
+**/obj/
+.DS_Store
+*.user
+*.suo
+
+# Legacy GlassQuote data (never commit)
+legacy/*
+!legacy/.gitkeep
+*.bak
+*.mdf
+*.ldf
