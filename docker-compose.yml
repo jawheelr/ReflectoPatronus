@@ -8,7 +8,10 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
       Security__RequirePqcVerification: ${REQUIRE_PQC_VERIFICATION:-false}
-      Database__ConnectionString: "Host=db;Port=5432;Database=${POSTGRES_DB:-reflectopatronus};Username=${APP_DB_USER:-reflectopatronus_app};Password=${APP_DB_PASSWORD};SSL Mode=VerifyFull;Root Certificate=/run/db-certs/ca.crt;SSL Certificate=/run/db-certs/api-client.crt;SSL Key=/run/db-certs/api-client.key;Timeout=8;Command Timeout=15;"
+      # First run only: creates this user with this password if NO user has a password yet. Remove afterwards.
+      Bootstrap__AdminUser: ${BOOTSTRAP_ADMIN_USER:-}
+      Bootstrap__AdminPassword: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      Database__ConnectionString: "Host=db;Port=5432;Database=${POSTGRES_DB:-reflectopatronus};Username=${APP_DB_USER:-reflectopatronus_app};Password=${APP_DB_PASSWORD};SSL Mode=VerifyFull;Root Certificate=/run/db-certs/ca.crt;SSL Certificate=/run/db-certs/api-client.crt;SSL Key=/run/db-certs/api-client.key;Timeout=8;Command Timeout=15;GSS Encryption Mode=Disable;"
     depends_on:
       db:
         condition: service_healthy

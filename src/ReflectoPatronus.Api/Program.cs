@@ -1,45 +1,60 @@
+using Microsoft.AspNetCore.Authentication;
 using Npgsql;
+using ReflectoPatronus.Api.Auth;
+using ReflectoPatronus.Api.Customers;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration["Database:ConnectionString"]
+    ?? throw new InvalidOperationException("Database:ConnectionString is required.");
+builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<DatabaseProbe>();
 
+builder.Services.AddAuthentication(AuthDefaults.Scheme)
+    .AddScheme<AuthenticationSchemeOptions, TokenAuthHandler>(AuthDefaults.Scheme, null);
+builder.Services.AddAuthorization(o => o.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+    .RequireAuthenticatedUser().Build());   // everything requires a signed-in user unless it says AllowAnonymous
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapGet("/", () => Results.Ok(new
-{
-    product = "ReflectoPatronus",
-    status = "starting",
-    apiVersion = "v1"
-}));
+await AuthEndpoints.BootstrapAdminAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Configuration,
+    app.Logger);
 
-app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
-
+app.MapGet("/", () => Results.Ok(new { product = "ReflectoPatronus", apiVersion = "v1" })).AllowAnonymous();
+app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
 app.MapGet("/health/ready", async (DatabaseProbe db, CancellationToken ct) =>
 {
     var result = await db.CheckAsync(ct);
-    return result.Ready
-        ? Results.Ok(result)
-        : Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
-});
+    return result.Ready ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
 
-app.MapGet("/api/v1/security/status", async (DatabaseProbe db, CancellationToken ct) =>
+var api = app.MapGroup("/api/v1");
+AuthEndpoints.Map(api);
+MeEndpoints.Map(api);
+CustomerEndpoints.Map(api);
+// Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).
+api.MapGet("/security/status", async (DatabaseProbe db, CancellationToken ct) =>
 {
     var result = await db.CheckAsync(ct);
-    return result.Ready
-        ? Results.Ok(result)
-        : Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
+    return result.Ready ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
 });
+
+// The contract that the generated TypeScript and Swift clients are built from. Public in Development only.
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("OpenApi:Enabled"))
+    app.MapOpenApi().AllowAnonymous();
 
 app.Run();
 
 sealed class DatabaseProbe(IConfiguration configuration)
 {
-    // When true, readiness is denied until PQC key exchange can be verified (currently impossible via pg_stat_ssl).
-    private readonly bool _requirePqc = configuration.GetValue<bool>("Security:RequirePqcVerification");
-
     private readonly string _connectionString =
         configuration["Database:ConnectionString"]
         ?? throw new InvalidOperationException("Database:ConnectionString is required.");
+    // When true, readiness is denied until PQC key exchange can be verified (currently impossible via pg_stat_ssl).
+    private readonly bool _requirePqc = configuration.GetValue<bool>("Security:RequirePqcVerification");
 
     public async Task<SecurityProbeResult> CheckAsync(CancellationToken cancellationToken)
     {

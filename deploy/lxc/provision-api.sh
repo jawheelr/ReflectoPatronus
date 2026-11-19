@@ -32,7 +32,7 @@ cat > /etc/reflectopatronus/api.env <<ENV
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://0.0.0.0:8080
 Security__RequirePqcVerification=${REQUIRE_PQC_VERIFICATION:-false}
-Database__ConnectionString=Host=db;Port=5432;Database=$POSTGRES_DB;Username=$APP_DB_USER;Password=$APP_DB_PASSWORD;SSL Mode=VerifyFull;Root Certificate=/etc/reflectopatronus/pki/ca.crt;SSL Certificate=/etc/reflectopatronus/pki/api-client.crt;SSL Key=/etc/reflectopatronus/pki/api-client.key;Timeout=8;Command Timeout=15;
+Database__ConnectionString=Host=db;Port=5432;Database=$POSTGRES_DB;Username=$APP_DB_USER;Password=$APP_DB_PASSWORD;SSL Mode=VerifyFull;Root Certificate=/etc/reflectopatronus/pki/ca.crt;SSL Certificate=/etc/reflectopatronus/pki/api-client.crt;SSL Key=/etc/reflectopatronus/pki/api-client.key;Timeout=8;Command Timeout=15;GSS Encryption Mode=Disable;
 ENV
 chown root:rpapi /etc/reflectopatronus/api.env; chmod 0640 /etc/reflectopatronus/api.env
 
