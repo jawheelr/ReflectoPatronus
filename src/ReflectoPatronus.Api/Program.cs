@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Npgsql;
 using ReflectoPatronus.Api.Auth;
 using ReflectoPatronus.Api.Customers;
+using ReflectoPatronus.Api.Documents;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,13 +18,30 @@ builder.Services.AddAuthorization(o => o.FallbackPolicy = new Microsoft.AspNetCo
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// The React console (built by scripts/build-web.sh into wwwroot) is served from the same origin as the API: no CORS.
+var serveWeb = File.Exists(Path.Combine(app.Environment.WebRootPath ?? "", "index.html"));
+if (serveWeb)
+{
+    app.Use(async (ctx, next) =>
+    {
+        ctx.Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+        ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
+        await next();
+    });
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 
 await AuthEndpoints.BootstrapAdminAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Configuration,
     app.Logger);
 
-app.MapGet("/", () => Results.Ok(new { product = "ReflectoPatronus", apiVersion = "v1" })).AllowAnonymous();
+// With the console present, "/" is the SPA (a mapped endpoint would win over the static files).
+if (!serveWeb)
+    app.MapGet("/", () => Results.Ok(new { product = "ReflectoPatronus", apiVersion = "v1" })).AllowAnonymous();
 app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous();
 app.MapGet("/health/ready", async (DatabaseProbe db, CancellationToken ct) =>
 {
@@ -35,12 +53,17 @@ var api = app.MapGroup("/api/v1");
 AuthEndpoints.Map(api);
 MeEndpoints.Map(api);
 CustomerEndpoints.Map(api);
+DocumentEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).
 api.MapGet("/security/status", async (DatabaseProbe db, CancellationToken ct) =>
 {
     var result = await db.CheckAsync(ct);
     return result.Ready ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
 });
+
+// Client-side routes (/customers/12 ...) fall back to the SPA; API and health paths never do.
+if (serveWeb)
+    app.MapFallbackToFile("{*path:regex(^(?!api/|health/|openapi/|assets/).*$)}", "index.html").AllowAnonymous();
 
 // The contract that the generated TypeScript and Swift clients are built from. Public in Development only.
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("OpenApi:Enabled"))

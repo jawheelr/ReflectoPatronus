@@ -82,8 +82,8 @@ public static class CustomerEndpoints
         return Results.Ok(partial with { Phones = phones });
     }
 
-    static string? Str(NpgsqlDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
+    internal static string? Str(NpgsqlDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
 
     /// <summary>User text is matched literally: escape LIKE wildcards.</summary>
-    static string EscapeLike(string s) => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+    internal static string EscapeLike(string s) => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 }

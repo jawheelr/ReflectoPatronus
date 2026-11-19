@@ -22,3 +22,7 @@ out/
 
 __pycache__/
 *.pyc
+
+src/ReflectoPatronus.Api/wwwroot/
+._*
+.DS_Store

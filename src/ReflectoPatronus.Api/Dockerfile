@@ -9,6 +9,6 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
-COPY --from=build /out ./
+COPY --from=build --chmod=a+rX /out ./
 USER $APP_UID
 ENTRYPOINT ["dotnet", "ReflectoPatronus.Api.dll"]
