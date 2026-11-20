@@ -24,7 +24,7 @@ public static class CustomerEndpoints
     /// <summary>
     /// q: digits only = phone prefix; otherwise name fragment (trigram-indexed) or account-number prefix. Empty q lists by name.
     /// </summary>
-    static async Task<IResult> Search(string? q, int? limit, int? offset, NpgsqlDataSource db, CancellationToken ct)
+    static async Task<IResult> Search(string? q, string? sort, int? limit, int? offset, NpgsqlDataSource db, CancellationToken ct)
     {
         var lim = Math.Clamp(limit ?? 25, 1, 100);
         var off = Math.Max(offset ?? 0, 0);
@@ -40,7 +40,7 @@ public static class CustomerEndpoints
             WHERE $1::text IS NULL
                OR ({(digits ? "c.number LIKE $1 || '%' OR EXISTS (SELECT 1 FROM customer_phone p WHERE p.customer_id = c.id AND p.number LIKE $1 || '%')"
                             : "lower(c.last_name || ' ' || coalesce(c.first_name, '')) LIKE '%' || lower($1) || '%' OR upper(c.number) LIKE upper($1) || '%'")})
-            ORDER BY lower(c.last_name), lower(coalesce(c.first_name, '')), c.id
+            ORDER BY {(sort == "code" ? "upper(c.number), c.id" : "lower(c.last_name), lower(coalesce(c.first_name, '')), c.id")}
             LIMIT $2 OFFSET $3
             """);
         cmd.Parameters.AddWithValue((object?)(string.IsNullOrEmpty(q) ? null : EscapeLike(q)) ?? DBNull.Value);

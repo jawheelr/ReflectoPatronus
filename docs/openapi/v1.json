@@ -171,6 +171,30 @@
         }
       }
     },
+    "/api/v1/tax-codes": {
+      "get": {
+        "tags": [
+          "TaxEndpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tax-groups": {
+      "get": {
+        "tags": [
+          "TaxEndpoints"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/security/status": {
       "get": {
         "tags": [
@@ -191,6 +215,13 @@
         "parameters": [
           {
             "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
             "in": "query",
             "schema": {
               "type": "string"
@@ -425,6 +456,9 @@
     },
     {
       "name": "MeEndpoints"
+    },
+    {
+      "name": "TaxEndpoints"
     },
     {
       "name": "CustomerEndpoints"

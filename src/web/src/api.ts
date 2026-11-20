@@ -75,8 +75,8 @@ export const setTimeZone = (timeZone: string | null) => call<void>('/me/settings
 export const getTimeZones = () => call<string[]>('/timezones')
 export const getSessions = () => call<SessionInfo[]>('/me/sessions')
 export const revokeSession = (id: string) => call<void>(`/me/sessions/${id}`, { method: 'DELETE' })
-export const searchCustomers = (q: string, offset = 0, limit = 25) =>
-  call<Page<CustomerSummary>>(`/customers?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`)
+export const searchCustomers = (q: string, offset = 0, limit = 25, sort: 'name' | 'code' = 'name') =>
+  call<Page<CustomerSummary>>(`/customers?q=${encodeURIComponent(q)}&sort=${sort}&limit=${limit}&offset=${offset}`)
 export const getCustomer = (id: number) => call<CustomerDetail>(`/customers/${id}`)
 
 export interface DocumentSummary { id: number; type: string; number: string; date: string; customerId: number | null; customerName: string | null; poNumber: string | null; voided: boolean; total: number }
@@ -93,6 +93,7 @@ export interface DocumentDetail {
   lines: DocumentLine[]; taxes: { code: string; percent: number; amount: number }[]
   installers: { code: string; name: string | null; hours: number | null; amount: number | null }[]
   statuses: { at: string | null; status: string; note: string | null }[]; revisions: { at: string; total: number | null; comment: string | null }[]
+  shopOrMobile: string | null
 }
 export interface DocumentQuery { type?: string; customerId?: number; q?: string; from?: string; to?: string; includeVoided?: boolean; offset?: number; limit?: number }
 export const searchDocuments = (f: DocumentQuery) => {
@@ -107,3 +108,8 @@ export const searchDocuments = (f: DocumentQuery) => {
   return call<Page<DocumentSummary>>(`/documents?${p}`)
 }
 export const getDocument = (id: number) => call<DocumentDetail>(`/documents/${id}`)
+
+export interface TaxCode { code: string; description: string | null; percent: number; taxesLabor: boolean; nonCalc: boolean }
+export interface TaxGroup { code: string; description: string | null; codes: { position: number; code: string; description: string | null; percent: number }[] }
+export const getTaxCodes = () => call<TaxCode[]>('/tax-codes')
+export const getTaxGroups = () => call<TaxGroup[]>('/tax-groups')

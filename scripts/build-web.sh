@@ -7,4 +7,5 @@ OUT="$ROOT/src/ReflectoPatronus.Api/wwwroot"
 rm -rf "$OUT"; mkdir -p "$OUT"
 docker run --rm -v "$ROOT/src/web:/src:ro" -v "$OUT:/out" node:24-slim \
   sh -c 'cp -r /src /work && cd /work && rm -rf node_modules dist && npm ci --no-audit --no-fund --ignore-scripts && npm run build && cp -r dist/. /out/ && chmod -R a+rX /out'
+find "$ROOT/src/ReflectoPatronus.Api" -name "._*" -not -path "*/obj/*" -delete 2>/dev/null || true   # exFAT/APFS-on-external drives create AppleDouble files that break the Docker build context
 echo "built $OUT"

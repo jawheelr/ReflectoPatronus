@@ -3,6 +3,7 @@ using Npgsql;
 using ReflectoPatronus.Api.Auth;
 using ReflectoPatronus.Api.Customers;
 using ReflectoPatronus.Api.Documents;
+using ReflectoPatronus.Api.Tax;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,6 +55,7 @@ AuthEndpoints.Map(api);
 MeEndpoints.Map(api);
 CustomerEndpoints.Map(api);
 DocumentEndpoints.Map(api);
+TaxEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).
 api.MapGet("/security/status", async (DatabaseProbe db, CancellationToken ct) =>
 {

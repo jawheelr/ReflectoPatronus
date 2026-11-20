@@ -60,6 +60,13 @@ check "LIKE wildcard is literal" True "$(curl -s "${H1[@]}" -G --data-urlencode 
 check "SQL-ish input is harmless" 200 "$(code "${H1[@]}" -G --data-urlencode "q='; DROP TABLE document;--" "$URL/api/v1/documents")"
 check "bad date is 400" 400 "$(code "${H1[@]}" "$URL/api/v1/documents?from=notadate")"
 
+echo "tax"
+check "unauthenticated tax codes is 401" 401 "$(code "$URL/api/v1/tax-codes")"
+check "tax codes list" True "$(curl -s "${H1[@]}" "$URL/api/v1/tax-codes" | J "len(d)>0 and all('percent' in c for c in d)")"
+check "tax groups have at most 5 codes" True "$(curl -s "${H1[@]}" "$URL/api/v1/tax-groups" | J "len(d)>0 and all(len(g['codes'])<=5 for g in d)")"
+check "customers sort by code" True "$(curl -s "${H1[@]}" "$URL/api/v1/customers?sort=code&limit=30" | J "[i['number'].upper() for i in d['items']]==sorted(i['number'].upper() for i in d['items'])")"
+check "document detail has shopOrMobile" True "$(echo "$DET" | J "'shopOrMobile' in d")"
+
 echo "sessions"
 R2="$(login "smoke-ipad" ipados)"; A2="$(echo "$R2" | J "d['accessToken']")"; F2="$(echo "$R2" | J "d['refreshToken']")"
 SID2="$(curl -s -H "Authorization: Bearer $A2" "$URL/api/v1/me/sessions" | J "[s['id'] for s in d if s['current']][0]")"

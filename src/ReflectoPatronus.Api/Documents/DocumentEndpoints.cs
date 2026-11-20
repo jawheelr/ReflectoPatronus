@@ -20,7 +20,7 @@ public record DocumentDetail(int Id, string Type, string TypeName, string Number
     decimal? DiscountPercent, string? SpecialInstructions, string? WorkOrderInstructions, string? NotePrinted, string? NoteInternal,
     DateTime CreatedAt, DateTime? PrintedAt, DocumentTotals Totals, IReadOnlyList<DocumentLine> Lines,
     IReadOnlyList<DocumentTaxLine> Taxes, IReadOnlyList<DocumentInstaller> Installers,
-    IReadOnlyList<DocumentStatusEvent> Statuses, IReadOnlyList<DocumentRevision> Revisions);
+    IReadOnlyList<DocumentStatusEvent> Statuses, IReadOnlyList<DocumentRevision> Revisions, string? ShopOrMobile);
 
 public static class DocumentEndpoints
 {
@@ -99,7 +99,7 @@ public static class DocumentEndpoints
                    d.cust_address1, d.cust_address2, d.cust_city, d.cust_state, d.cust_zip, d.cust_phones,
                    d.loc_address1, d.loc_address2, d.loc_city, d.loc_state, d.loc_zip,
                    d.po_number, d.policy_number, d.claim_number, d.source_doc_number, d.terms, s.name, d.tax_group, d.price_category,
-                   d.discount_pct, d.spec_instructions, d.wo_instructions, d.note_printed, d.note_internal, d.created_at, d.printed_at
+                   d.discount_pct, d.spec_instructions, d.wo_instructions, d.note_printed, d.note_internal, d.created_at, d.printed_at, d.shop_or_mobile
             FROM document d
             JOIN doc_type dt ON dt.code = d.doc_type
             LEFT JOIN staff s ON s.id = d.staff_sales_id
@@ -123,6 +123,7 @@ public static class DocumentEndpoints
         decimal? disc = r.IsDBNull(28) ? null : r.GetDecimal(28);
         string? spec = S(r, 29), wo = S(r, 30), notePrinted = S(r, 31), noteInternal = S(r, 32);
         var created = r.GetDateTime(33); DateTime? printed = r.IsDBNull(34) ? null : r.GetDateTime(34);
+        var shopOrMobile = S(r, 35);
         await r.CloseAsync();
 
         var lines = new List<DocumentLine>();
@@ -193,6 +194,6 @@ public static class DocumentEndpoints
 
         return Results.Ok(new DocumentDetail(id, typeCode, typeName, number, date, loss, voided, custId, billId, customer, site, po, policy,
             claim, src, terms, sales, taxGroup, priceCat, disc, spec, wo, notePrinted, noteInternal, created, printed, totals,
-            lines, taxes, installers, statuses, revisions));
+            lines, taxes, installers, statuses, revisions, shopOrMobile));
     }
 }
