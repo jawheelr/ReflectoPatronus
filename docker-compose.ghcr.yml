@@ -5,7 +5,7 @@
 # Needs Docker Compose >= 2.24 (for !reset).
 services:
   api:
-    image: ${RP_IMAGE_PREFIX:-ghcr.io/jawheelr}/reflectopatronus-api:${RP_TAG:-main}
+    image: ${RP_IMAGE_PREFIX:-ghcr.io/jawheelr}/reflectopatronus:${RP_TAG:-main}
     build: !reset null
   db:
     image: ${RP_IMAGE_PREFIX:-ghcr.io/jawheelr}/reflectopatronus-db:${RP_TAG:-main}
