@@ -10,9 +10,9 @@ set -a; source /root/rp.env; set +a
 PGV=17
 export DEBIAN_FRONTEND=noninteractive
 
-apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg sudo
-if [[ ! -f /etc/apt/sources.list.d/pgdg.list ]]; then   # Debian 12 ships PostgreSQL 15; we need 17 from PGDG
+PREINSTALLED=false; [[ -f /opt/reflectopatronus/.preinstalled ]] && PREINSTALLED=true   # set by the LXC template
+$PREINSTALLED || { apt-get update -qq; apt-get install -y -qq ca-certificates curl gnupg sudo; }
+if ! $PREINSTALLED && [[ ! -f /etc/apt/sources.list.d/pgdg.list ]]; then   # Debian 12 ships PostgreSQL 15; we need 17 from PGDG
   install -d /usr/share/keyrings
   curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
   echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list
@@ -25,7 +25,9 @@ if findmnt -n /var/lib/postgresql >/dev/null 2>&1; then
     || { echo "ERROR: /var/lib/postgresql is a mount but not writable. On the host: chown 100000:100000 <dir>" >&2; exit 1; }
   echo "Persistent data mount detected: $(findmnt -n -o SOURCE,FSTYPE /var/lib/postgresql)"
 fi
-apt-get install -y -qq "postgresql-$PGV"
+$PREINSTALLED || apt-get install -y -qq "postgresql-$PGV"
+# The template deliberately has no cluster (the data dir is usually a mount); create it on first run.
+pg_lsclusters -h | awk '{print $1"/"$2}' | grep -qx "$PGV/main" || pg_createcluster "$PGV" main
 systemctl enable --now "postgresql@$PGV-main"
 
 # --- Bootstrap roles/db using Debian's default (peer / loopback) auth, BEFORE our strict pg_hba is installed. ---

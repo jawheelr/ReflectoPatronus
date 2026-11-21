@@ -66,6 +66,30 @@ pct exec 211 -- bash /opt/reflectopatronus/bundle/deploy/lxc/provision-api.sh
 ```
 Passwords must not contain `;` or `'` (they go into a connection string / SQL literal). `rp.env` contains secrets: delete it from the CT once provisioned, or keep it `chmod 600`.
 
+### Downloadable LXC template (no repo checkout needed on the host)
+Every release (`v*` tag) attaches `reflectopatronus-<version>-amd64.tar.zst` and a `.sha256` to its GitHub Release. It is a Debian 12 container root filesystem with PostgreSQL 17, the ASP.NET Core 10 runtime, the API + web console and the provisioning scripts already installed, so provisioning needs no internet. One template serves both roles; you pick `db` or `api` when you run `rp-setup`. (`.github/workflows/lxc-template.yml` builds it; `scripts/build-lxc-template.sh` builds it locally.)
+
+On the **Proxmox host**:
+```bash
+cd /var/lib/vz/template/cache
+curl -LO https://github.com/jawheelr/ReflectoPatronus/releases/download/vX.Y.Z/reflectopatronus-X.Y.Z-amd64.tar.zst
+curl -LO https://github.com/jawheelr/ReflectoPatronus/releases/download/vX.Y.Z/reflectopatronus-X.Y.Z-amd64.tar.zst.sha256 && sha256sum -c reflectopatronus-X.Y.Z-amd64.tar.zst.sha256
+
+# DB container, with the persistent-data choice (rootfs, a Proxmox volume, or a host bind mount):
+pct create 210 local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst --hostname rp-db --unprivileged 1 --cores 2 --memory 2048 \
+  --rootfs local-lvm:16 --net0 name=eth0,bridge=vmbr1,ip=10.10.10.10/24,gw=10.10.10.1,firewall=1 --onboot 1 \
+  --mp0 local-zfs:100,mp=/var/lib/postgresql,backup=1        # or omit --mp0 to keep data in the rootfs
+pct create 211 local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst --hostname rp-api --unprivileged 1 --cores 2 --memory 2048 \
+  --rootfs local-lvm:8 --net0 name=eth0,bridge=vmbr1,ip=10.10.10.11/24,gw=10.10.10.1,firewall=1 --onboot 1
+pct start 210; pct start 211
+```
+Then continue exactly as in step 3 above (write `rp-db.env` / `rp-api.env`, plus `BOOTSTRAP_ADMIN_PASSWORD=<12+ chars>` in the API one; `pct push` the env files to `/root/rp.env` and the certs to `/root/pki-in/`), but provision with:
+```bash
+pct exec 210 -- rp-setup db
+pct exec 211 -- rp-setup api
+```
+`deploy/lxc/pct-create.sh --template local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst ...` does the create/push work for you if you have the repo on the host (including the data-mount prompt). With a bind mount, chown the host directory to `100000:100000` first. The template contains no secrets, certs or data. It is amd64 only. **Not yet tested on a real Proxmox host.**
+
 ## Published images (ghcr.io)
 `.github/workflows/images.yml` builds `linux/amd64` + `linux/arm64` images on every push to `main` and every `v*` tag, and publishes them to GitHub Container Registry:
 

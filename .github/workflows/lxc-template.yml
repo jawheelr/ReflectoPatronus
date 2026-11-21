@@ -1,0 +1,40 @@
+# Builds the downloadable Proxmox LXC template (Debian 12 + PostgreSQL 17 + API/web console, preinstalled).
+#   tag vX.Y.Z        -> attaches reflectopatronus-X.Y.Z-amd64.tar.zst (+ .sha256) to the GitHub Release
+#   manual / PR       -> builds it and keeps it as a workflow artifact (14 days)
+name: lxc-template
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths: ['deploy/lxc/**', 'deploy/common/**', 'db/**', 'scripts/**', 'src/**', '.github/workflows/lxc-template.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  template:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # attach the asset to the release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install zstd
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zstd
+      - name: Build template
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          [[ "$GITHUB_REF_TYPE" == tag ]] || VER="0.0.0-${GITHUB_SHA::7}"
+          ./scripts/build-lxc-template.sh "$VER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lxc-template
+          path: dist/reflectopatronus-*
+          retention-days: 14
+      - name: Attach to release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/reflectopatronus-*
+          generate_release_notes: true
