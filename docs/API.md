@@ -26,3 +26,22 @@ Base path `/api/v1`. The machine-readable contract is [docs/openapi/v1.json](ope
 
 ## Testing
 `scripts/smoke-api.sh` runs 41 end-to-end checks against a running stack (auth, rotation, revocation, time zones, customer and document search, totals consistency, injection and wildcard handling).
+
+## Supplier pricing (admin only)
+`app_user.is_admin` gates everything under `/api/v1/pricing` (403 otherwise; `GET /me` returns `isAdmin`). The bootstrap admin is an admin.
+
+Selling price (`part_price.price1`) = supplier unit cost x link factor x (1 + category `markup_pct`/100), rounded to cents. Categories with no markup are never touched. **Nothing changes live prices except approving a batch**; quotes/invoices keep their own prices.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET/POST /pricing/suppliers`, `PUT/DELETE /pricing/suppliers/{id}` | Suppliers: source `manual`, `upload` or `feed` (https URL, optional write-only auth header, refresh hours, column mapping, csv/json) |
+| `GET /pricing/suppliers/{id}/items` | Supplier items and costs |
+| `POST /pricing/suppliers/{id}/costs` | Manual cost rows `{rows:[{sku,description,cost}]}` |
+| `POST /pricing/suppliers/{id}/adjust` | `{percent}` applied to all of the supplier's costs |
+| `POST /pricing/suppliers/{id}/import` | `{content}` CSV/JSON text, parsed with the supplier's column map |
+| `POST /pricing/suppliers/{id}/run` | Fetch the feed now (scheduler does this every `refresh_hours`, checked every 5 min) |
+| `GET /pricing/links`, `PUT/DELETE /pricing/links/{thicknessId}`, `GET /pricing/thicknesses?q` | Link a glass/part thickness to a supplier item + factor |
+| `GET /pricing/markups`, `PUT /pricing/markups/{code}`, `POST /pricing/recalculate` | Category markups (null = manual) |
+| `GET /pricing/batches[?status]`, `GET /pricing/batches/{id}`, `POST .../approve`, `POST .../reject` | Review proposed changes (old vs new) |
+
+Each ingest returns `{added, changed, unchanged, batchId, priceChanges}`. A newer pending batch supersedes an older one for the same supplier. Feed fetching is https-only, no redirects, refuses private/loopback addresses (SSRF guard), 10 MB / 30 s limits.

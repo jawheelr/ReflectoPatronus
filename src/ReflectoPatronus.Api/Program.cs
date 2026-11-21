@@ -3,6 +3,7 @@ using Npgsql;
 using ReflectoPatronus.Api.Auth;
 using ReflectoPatronus.Api.Customers;
 using ReflectoPatronus.Api.Documents;
+using ReflectoPatronus.Api.Pricing;
 using ReflectoPatronus.Api.Tax;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,7 @@ var connectionString = builder.Configuration["Database:ConnectionString"]
     ?? throw new InvalidOperationException("Database:ConnectionString is required.");
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<DatabaseProbe>();
+builder.Services.AddHostedService<PricingScheduler>();
 
 builder.Services.AddAuthentication(AuthDefaults.Scheme)
     .AddScheme<AuthenticationSchemeOptions, TokenAuthHandler>(AuthDefaults.Scheme, null);
@@ -56,6 +58,7 @@ MeEndpoints.Map(api);
 CustomerEndpoints.Map(api);
 DocumentEndpoints.Map(api);
 TaxEndpoints.Map(api);
+PricingEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).
 api.MapGet("/security/status", async (DatabaseProbe db, CancellationToken ct) =>
 {
@@ -65,7 +68,7 @@ api.MapGet("/security/status", async (DatabaseProbe db, CancellationToken ct) =>
 
 // Client-side routes (/customers/12 ...) fall back to the SPA; API and health paths never do.
 if (serveWeb)
-    app.MapFallbackToFile("{*path:regex(^(?!api/|health/|openapi/|assets/).*$)}", "index.html").AllowAnonymous();
+    app.MapFallbackToFile("{*path:regex(^(?!api/|health/|openapi/|assets/)[^.]*$)}", "index.html").AllowAnonymous();   // paths with a file extension are static files
 
 // The contract that the generated TypeScript and Swift clients are built from. Public in Development only.
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("OpenApi:Enabled"))

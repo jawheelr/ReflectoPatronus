@@ -60,3 +60,17 @@ export function Modal({ title, onClose, children, width = 720 }: { title: string
 export function Audit({ createdAt, updatedAt }: { createdAt?: string; updatedAt?: string }) {
   return <div className="audit"><span>Created: {createdAt ?? ''}</span><span>Updated: {updatedAt ?? ''}</span></div>
 }
+
+/** Placeholder rows while a list loads, so the layout does not jump. */
+export function SkeletonRows({ cols, rows = 6 }: { cols: number; rows?: number }) {
+  return <>{Array.from({ length: rows }, (_, r) => <tr key={r} className="skeleton">{Array.from({ length: cols }, (_, c) => <td key={c}><span style={{ width: `${55 + ((r * 7 + c * 13) % 40)}%` }} /></td>)}</tr>)}</>
+}
+
+/** Move a highlighted id up/down a list with the arrow keys; returns the new id or null if the key is not a move. */
+export function arrowMove(e: { key: string; preventDefault: () => void }, ids: number[], current: number | null): number | null {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return null
+  e.preventDefault()
+  if (ids.length === 0) return null
+  const i = current == null ? -1 : ids.indexOf(current)
+  return ids[Math.min(ids.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]
+}

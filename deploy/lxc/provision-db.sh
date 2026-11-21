@@ -18,6 +18,13 @@ if [[ ! -f /etc/apt/sources.list.d/pgdg.list ]]; then   # Debian 12 ships Postgr
   echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list
   apt-get update -qq
 fi
+# If a separate data volume/bind mount is attached (pct-create.sh --data-mount), refuse to continue unless it is writable
+# by this container's root; PostgreSQL's cluster is then created ON it (/var/lib/postgresql).
+if findmnt -n /var/lib/postgresql >/dev/null 2>&1; then
+  touch /var/lib/postgresql/.rp-write-test 2>/dev/null && rm -f /var/lib/postgresql/.rp-write-test \
+    || { echo "ERROR: /var/lib/postgresql is a mount but not writable. On the host: chown 100000:100000 <dir>" >&2; exit 1; }
+  echo "Persistent data mount detected: $(findmnt -n -o SOURCE,FSTYPE /var/lib/postgresql)"
+fi
 apt-get install -y -qq "postgresql-$PGV"
 systemctl enable --now "postgresql@$PGV-main"
 

@@ -2,7 +2,7 @@
 // closes). Both are opaque, revocable per device. A 401 triggers one refresh-and-retry.
 export interface UserInfo { id: number; code: string; name: string | null; timeZone: string }
 interface TokenResponse { accessToken: string; refreshToken: string; expiresInSeconds: number; user: UserInfo }
-export interface Me { id: number; code: string; name: string | null; timeZone: string; userTimeZone: string | null; companyTimeZone: string }
+export interface Me { id: number; code: string; name: string | null; timeZone: string; userTimeZone: string | null; companyTimeZone: string; isAdmin: boolean }
 export interface SessionInfo { id: string; deviceName: string; platform: string; createdAt: string; lastSeenAt: string; current: boolean }
 export interface CustomerSummary { id: number; number: string; lastName: string; firstName: string | null; city: string | null; state: string | null; phone: string | null; balance: number }
 export interface CustomerPhone { slot: number; number: string; ext: string | null }
@@ -113,3 +113,37 @@ export interface TaxCode { code: string; description: string | null; percent: nu
 export interface TaxGroup { code: string; description: string | null; codes: { position: number; code: string; description: string | null; percent: number }[] }
 export const getTaxCodes = () => call<TaxCode[]>('/tax-codes')
 export const getTaxGroups = () => call<TaxGroup[]>('/tax-groups')
+
+// ---- supplier pricing (admin only) ----
+export interface Supplier {
+  id: number; name: string; active: boolean; sourceType: 'manual' | 'upload' | 'feed'; feedUrl: string | null; hasAuthHeader: boolean
+  feedFormat: 'csv' | 'json'; columnMap: { sku?: string; cost?: string; description?: string }; refreshHours: number | null
+  lastRunAt: string | null; lastStatus: string | null; lastMessage: string | null; itemCount: number; linkedCount: number
+}
+export interface SupplierInput { name: string; active: boolean; sourceType: string; feedUrl: string | null; feedAuthHeader: string | null; feedFormat: string; columnMap: object; refreshHours: number | null }
+export interface SupplierItem { id: number; sku: string; description: string | null; unitCost: number; costUpdatedAt: string; links: number }
+export interface IngestResult { added: number; changed: number; unchanged: number; batchId: number | null; priceChanges: number }
+export interface CostLink { thicknessId: number; partCode: string; partDescription: string | null; thickNum: number; thickDen: number; supplierItemId: number; sku: string; unitCost: number; factor: number; supplierId: number }
+export interface ThicknessHit { thicknessId: number; partCode: string; partDescription: string | null; thickNum: number; thickDen: number; linked: boolean }
+export interface Markup { code: string; description: string | null; markupPct: number | null; linkedPrices: number }
+export interface Batch { id: number; createdAt: string; source: string; status: string; decidedAt: string | null; supplier: string | null; decidedBy: string | null; changeCount: number }
+export interface BatchChange { partCode: string; partDescription: string | null; thickNum: number; thickDen: number; category: string | null; oldPrice: number | null; newPrice: number; cost: number; markupPct: number }
+const J = (b: unknown): RequestInit => ({ body: JSON.stringify(b) })
+export const getSuppliers = () => call<Supplier[]>('/pricing/suppliers')
+export const saveSupplier = (id: number | null, i: SupplierInput) => call<{ id: number }>(id ? `/pricing/suppliers/${id}` : '/pricing/suppliers', { method: id ? 'PUT' : 'POST', ...J(i) })
+export const deleteSupplier = (id: number) => call<void>(`/pricing/suppliers/${id}`, { method: 'DELETE' })
+export const getSupplierItems = (id: number, q = '') => call<SupplierItem[]>(`/pricing/suppliers/${id}/items?q=${encodeURIComponent(q)}`)
+export const postCosts = (id: number, rows: { sku: string; description: string | null; cost: number }[]) => call<IngestResult>(`/pricing/suppliers/${id}/costs`, { method: 'POST', ...J({ rows }) })
+export const adjustCosts = (id: number, percent: number) => call<IngestResult>(`/pricing/suppliers/${id}/adjust`, { method: 'POST', ...J({ percent }) })
+export const importCosts = (id: number, content: string) => call<IngestResult>(`/pricing/suppliers/${id}/import`, { method: 'POST', ...J({ content }) })
+export const runFeed = (id: number) => call<IngestResult>(`/pricing/suppliers/${id}/run`, { method: 'POST' })
+export const getLinks = () => call<CostLink[]>('/pricing/links')
+export const searchThicknesses = (q: string) => call<ThicknessHit[]>(`/pricing/thicknesses?q=${encodeURIComponent(q)}`)
+export const putLink = (thicknessId: number, supplierItemId: number, factor: number) => call<void>(`/pricing/links/${thicknessId}`, { method: 'PUT', ...J({ supplierItemId, factor }) })
+export const deleteLink = (thicknessId: number) => call<void>(`/pricing/links/${thicknessId}`, { method: 'DELETE' })
+export const getMarkups = () => call<Markup[]>('/pricing/markups')
+export const putMarkup = (code: string, markupPct: number | null) => call<IngestResult>(`/pricing/markups/${encodeURIComponent(code)}`, { method: 'PUT', ...J({ markupPct }) })
+export const recalculate = () => call<IngestResult>('/pricing/recalculate', { method: 'POST' })
+export const getBatches = (status = '') => call<Batch[]>(`/pricing/batches?status=${status}`)
+export const getBatch = (id: number) => call<BatchChange[]>(`/pricing/batches/${id}`)
+export const decideBatch = (id: number, approve: boolean) => call<{ status: string; pricesUpdated: number }>(`/pricing/batches/${id}/${approve ? 'approve' : 'reject'}`, { method: 'POST' })

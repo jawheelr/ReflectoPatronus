@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace ReflectoPatronus.Api.Auth;
 
-public record MeResponse(int Id, string Code, string? Name, string TimeZone, string? UserTimeZone, string CompanyTimeZone);
+public record MeResponse(int Id, string Code, string? Name, string TimeZone, string? UserTimeZone, string CompanyTimeZone, bool IsAdmin);
 public record UpdateSettingsRequest(string? TimeZone);
 
 public static class MeEndpoints
@@ -51,14 +51,14 @@ public static class MeEndpoints
     static async Task<MeResponse> Load(NpgsqlDataSource db, short id, CancellationToken ct)
     {
         await using var cmd = db.CreateCommand("""
-            SELECT u.code, u.name, u.time_zone, coalesce((SELECT time_zone FROM company ORDER BY id LIMIT 1), 'America/Chicago')
+            SELECT u.code, u.name, u.time_zone, u.is_admin, coalesce((SELECT time_zone FROM company ORDER BY id LIMIT 1), 'America/Chicago')
             FROM app_user u WHERE u.id = $1
             """);
         cmd.Parameters.AddWithValue(id);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         await r.ReadAsync(ct);
         var userTz = r.IsDBNull(2) ? null : r.GetString(2);
-        var company = r.GetString(3);
-        return new MeResponse(id, r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), userTz ?? company, userTz, company);
+        var isAdmin = r.GetBoolean(3); var company = r.GetString(4);
+        return new MeResponse(id, r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), userTz ?? company, userTz, company, isAdmin);
     }
 }

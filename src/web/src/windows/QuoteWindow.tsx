@@ -50,7 +50,7 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
             </select>
           </Field>
           <Field label="Document #">
-            <input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={e => e.key === 'Enter' && enter()} placeholder="Type a number, Enter" />
+            <input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={e => e.key === 'Enter' && enter()} placeholder="Type a number, Enter" autoFocus={initialId == null} />
             <button className="dots" title="Look up a document" onClick={() => setLookup(number.trim())}>…</button>
           </Field>
           {d?.voided && <span className="badge">VOID</span>}

@@ -36,6 +36,13 @@ On the **Proxmox host** (as root), with the repo and `certs/` present:
 deploy/lxc/pct-create.sh --role db  --ctid 210 --name rp-db  --ip 10.10.10.10/24 --gw 10.10.10.1 --bridge vmbr1 --certs ./certs
 deploy/lxc/pct-create.sh --role api --ctid 211 --name rp-api --ip 10.10.10.11/24 --gw 10.10.10.1 --bridge vmbr1 --certs ./certs --artifact dist/reflectopatronus-api.tar.gz
 
+# 2b. Persistent data location (db role). You are PROMPTED when run from a terminal; or pass it explicitly:
+#       --data-mount rootfs                      inside the container disk (default)
+#       --data-mount volume:local-zfs:100        separate 100 GB Proxmox volume on that storage
+#       --data-mount bind:/mnt/ssd/rp-data       an existing host directory or mounted volume
+#     Mounted at /var/lib/postgresql. Bind dirs are chowned to 100000:100000 (unprivileged root mapping) and survive
+#     'pct destroy', so a rebuilt container can re-use the same data; volumes are deleted with the container.
+
 # 3. Write each CT's env file on the host, push it, then provision
 cat > /tmp/rp-db.env <<EOF
 POSTGRES_DB=reflectopatronus

@@ -31,7 +31,7 @@ function Login({ onSignedIn }: { onSignedIn: () => void }) {
   }
   return (
     <form className="login" onSubmit={submit}>
-      <h1><b>reflecto</b>patronus</h1>
+      <img className="login-logo" src="/logo-lockup.svg" alt="ReflectoPatronus" />
       <label>User<input value={userCode} onChange={e => setUserCode(e.target.value)} autoFocus autoComplete="username" /></label>
       <label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label>
       {error && <p className="error">{error}</p>}

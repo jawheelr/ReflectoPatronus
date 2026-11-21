@@ -177,8 +177,8 @@ public static class AuthEndpoints
         if ((bool)(await any.ExecuteScalarAsync())!) { log.LogInformation("Bootstrap admin skipped: a user already has a password."); return; }
         if (pw.Length < 12) { log.LogError("Bootstrap:AdminPassword must be at least 12 characters; admin NOT created."); return; }
         await using var cmd = db.CreateCommand("""
-            INSERT INTO app_user (code, name, active, password_hash) VALUES ($1, $1, true, $2)
-            ON CONFLICT (code) DO UPDATE SET password_hash = EXCLUDED.password_hash, active = true
+            INSERT INTO app_user (code, name, active, password_hash, is_admin) VALUES ($1, $1, true, $2, true)
+            ON CONFLICT (code) DO UPDATE SET password_hash = EXCLUDED.password_hash, active = true, is_admin = true
             """);
         cmd.Parameters.AddWithValue(code.Trim());
         cmd.Parameters.AddWithValue(Hasher.HashPassword(new object(), pw));

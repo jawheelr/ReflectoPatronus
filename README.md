@@ -1,5 +1,8 @@
 # ReflectoPatronus
 
+**A modern glass shop software.**  
+Developer: Jarred Wheeler
+
 Replacement for GlassQuote 7 (flat-glass quoting/invoicing): PostgreSQL 17 + ASP.NET Core API (React and iOS clients planned), runnable on **Docker** or **Proxmox LXC** from the same config.
 
 | Doc | What |
