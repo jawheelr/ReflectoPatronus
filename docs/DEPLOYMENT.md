@@ -67,7 +67,7 @@ pct exec 211 -- bash /opt/reflectopatronus/bundle/deploy/lxc/provision-api.sh
 Passwords must not contain `;` or `'` (they go into a connection string / SQL literal). `rp.env` contains secrets: delete it from the CT once provisioned, or keep it `chmod 600`.
 
 ### Downloadable LXC template (no repo checkout needed on the host)
-Every release (`v*` tag) attaches `reflectopatronus-<version>-amd64.tar.zst` and a `.sha256` to its GitHub Release. It is a Debian 12 container root filesystem with PostgreSQL 17, the ASP.NET Core 10 runtime, the API + web console and the provisioning scripts already installed, so provisioning needs no internet. One template serves both roles; you pick `db` or `api` when you run `rp-setup`. (`.github/workflows/lxc-template.yml` builds it; `scripts/build-lxc-template.sh` builds it locally.)
+Every push to `main` refreshes the rolling `edge` pre-release (`reflectopatronus-edge-amd64.tar.zst`); every release (`v*` tag) attaches `reflectopatronus-<version>-amd64.tar.zst` and a `.sha256` to its GitHub Release. It is a Debian 12 container root filesystem with PostgreSQL 17, the ASP.NET Core 10 runtime, the API + web console and the provisioning scripts already installed, so provisioning needs no internet. One template serves both roles; you pick `db` or `api` when you run `rp-setup`. (`.github/workflows/lxc-template.yml` builds it; `scripts/build-lxc-template.sh` builds it locally.)
 
 On the **Proxmox host**:
 ```bash
@@ -95,7 +95,7 @@ pct exec 211 -- rp-setup api
 
 | Image | Contents |
 |---|---|
-| `ghcr.io/jawheelr/reflectopatronus-api` | API + React console |
+| `ghcr.io/jawheelr/reflectopatronus` | API + React console |
 | `ghcr.io/jawheelr/reflectopatronus-db` | PostgreSQL 17 with the project's TLS 1.3 / pg_hba config |
 | `ghcr.io/jawheelr/reflectopatronus-importer` | legacy SQL Server importer (operations use) |
 

@@ -1,10 +1,12 @@
 # Builds the downloadable Proxmox LXC template (Debian 12 + PostgreSQL 17 + API/web console, preinstalled).
 #   tag vX.Y.Z        -> attaches reflectopatronus-X.Y.Z-amd64.tar.zst (+ .sha256) to the GitHub Release
+#   push to main      -> rebuilds the rolling pre-release `edge` (reflectopatronus-edge-amd64.tar.zst)
 #   manual / PR       -> builds it and keeps it as a workflow artifact (14 days)
 name: lxc-template
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   pull_request:
     paths: ['deploy/lxc/**', 'deploy/common/**', 'db/**', 'scripts/**', 'src/**', '.github/workflows/lxc-template.yml']
@@ -25,8 +27,10 @@ jobs:
       - name: Build template
         run: |
           VER="${GITHUB_REF_NAME#v}"
-          [[ "$GITHUB_REF_TYPE" == tag ]] || VER="0.0.0-${GITHUB_SHA::7}"
-          ./scripts/build-lxc-template.sh "$VER"
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            if [[ "$GITHUB_REF_NAME" == main ]]; then VER=edge; else VER="0.0.0-${GITHUB_SHA::7}"; fi
+          fi
+          bash scripts/build-lxc-template.sh "$VER"
       - uses: actions/upload-artifact@v4
         with:
           name: lxc-template
@@ -38,3 +42,12 @@ jobs:
         with:
           files: dist/reflectopatronus-*
           generate_release_notes: true
+      - name: Update rolling `edge` pre-release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete edge --cleanup-tag --yes || true
+          gh release create edge dist/reflectopatronus-* --prerelease --target "$GITHUB_SHA" \
+            --title "edge (latest main)" \
+            --notes "Rolling build of the latest commit on main ($GITHUB_SHA). Not a stable release; use a vX.Y.Z release for production."

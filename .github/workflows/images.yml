@@ -3,7 +3,7 @@
 #   tag vX.Y.Z        -> :X.Y.Z, :X.Y, :latest
 #   pull requests     -> build only (nothing is pushed)
 # Images (linux/amd64 + linux/arm64):
-#   ghcr.io/<owner>/reflectopatronus-api   API + web console
+#   ghcr.io/<owner>/reflectopatronus            the application: API + web console
 #   ghcr.io/<owner>/reflectopatronus-db    PostgreSQL 17 with the project's TLS / pg_hba config
 #   ghcr.io/<owner>/reflectopatronus-importer   legacy SQL Server -> PostgreSQL importer (ops use)
 # No secrets, certificates or legacy data are baked into any image (see .dockerignore).
@@ -34,14 +34,17 @@ jobs:
       matrix:
         include:
           - name: api
+            image: reflectopatronus
             context: src/ReflectoPatronus.Api
             file: src/ReflectoPatronus.Api/Dockerfile
             web: true
           - name: db
+            image: reflectopatronus-db
             context: .
             file: docker/postgres/Dockerfile
             web: false
           - name: importer
+            image: reflectopatronus-importer
             context: tools/importer
             file: tools/importer/Dockerfile
             web: false
@@ -78,7 +81,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/reflectopatronus-${{ matrix.name }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-
@@ -86,8 +89,9 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
           labels: |
-            org.opencontainers.image.title=reflectopatronus-${{ matrix.name }}
+            org.opencontainers.image.title=${{ matrix.image }}
             org.opencontainers.image.description=ReflectoPatronus: a modern glass shop software
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - uses: docker/build-push-action@v6
         with:
