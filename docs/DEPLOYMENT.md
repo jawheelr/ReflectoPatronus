@@ -66,6 +66,51 @@ pct exec 211 -- bash /opt/reflectopatronus/bundle/deploy/lxc/provision-api.sh
 ```
 Passwords must not contain `;` or `'` (they go into a connection string / SQL literal). `rp.env` contains secrets: delete it from the CT once provisioned, or keep it `chmod 600`.
 
+### Downloadable LXC template (no repo checkout needed on the host)
+Every release (`v*` tag) attaches `reflectopatronus-<version>-amd64.tar.zst` and a `.sha256` to its GitHub Release. It is a Debian 12 container root filesystem with PostgreSQL 17, the ASP.NET Core 10 runtime, the API + web console and the provisioning scripts already installed, so provisioning needs no internet. One template serves both roles; you pick `db` or `api` when you run `rp-setup`. (`.github/workflows/lxc-template.yml` builds it; `scripts/build-lxc-template.sh` builds it locally.)
+
+On the **Proxmox host**:
+```bash
+cd /var/lib/vz/template/cache
+curl -LO https://github.com/jawheelr/ReflectoPatronus/releases/download/vX.Y.Z/reflectopatronus-X.Y.Z-amd64.tar.zst
+curl -LO https://github.com/jawheelr/ReflectoPatronus/releases/download/vX.Y.Z/reflectopatronus-X.Y.Z-amd64.tar.zst.sha256 && sha256sum -c reflectopatronus-X.Y.Z-amd64.tar.zst.sha256
+
+# DB container, with the persistent-data choice (rootfs, a Proxmox volume, or a host bind mount):
+pct create 210 local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst --hostname rp-db --unprivileged 1 --cores 2 --memory 2048 \
+  --rootfs local-lvm:16 --net0 name=eth0,bridge=vmbr1,ip=10.10.10.10/24,gw=10.10.10.1,firewall=1 --onboot 1 \
+  --mp0 local-zfs:100,mp=/var/lib/postgresql,backup=1        # or omit --mp0 to keep data in the rootfs
+pct create 211 local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst --hostname rp-api --unprivileged 1 --cores 2 --memory 2048 \
+  --rootfs local-lvm:8 --net0 name=eth0,bridge=vmbr1,ip=10.10.10.11/24,gw=10.10.10.1,firewall=1 --onboot 1
+pct start 210; pct start 211
+```
+Then continue exactly as in step 3 above (write `rp-db.env` / `rp-api.env`, plus `BOOTSTRAP_ADMIN_PASSWORD=<12+ chars>` in the API one; `pct push` the env files to `/root/rp.env` and the certs to `/root/pki-in/`), but provision with:
+```bash
+pct exec 210 -- rp-setup db
+pct exec 211 -- rp-setup api
+```
+`deploy/lxc/pct-create.sh --template local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst ...` does the create/push work for you if you have the repo on the host (including the data-mount prompt). With a bind mount, chown the host directory to `100000:100000` first. The template contains no secrets, certs or data. It is amd64 only. **Not yet tested on a real Proxmox host.**
+
+## Published images (ghcr.io)
+`.github/workflows/images.yml` builds `linux/amd64` + `linux/arm64` images on every push to `main` and every `v*` tag, and publishes them to GitHub Container Registry:
+
+| Image | Contents |
+|---|---|
+| `ghcr.io/jawheelr/reflectopatronus-api` | API + React console |
+| `ghcr.io/jawheelr/reflectopatronus-db` | PostgreSQL 17 with the project's TLS 1.3 / pg_hba config |
+| `ghcr.io/jawheelr/reflectopatronus-importer` | legacy SQL Server importer (operations use) |
+
+Tags: `main`, `sha-<short>`, and for releases `X.Y.Z`, `X.Y`, `latest`. Pull requests build but do not push. No secrets, certs or legacy data are in the images; they come in at run time exactly as with a local build. New GHCR packages are **private** until you change their visibility (repo -> Packages), or run `docker login ghcr.io` first.
+
+**Docker, from the registry:**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env pull
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env up -d
+./scripts/migrate.sh docker
+```
+Pin a release with `RP_TAG=1.0.0` in `.env`.
+
+**Proxmox VE 9.1+, LXC from an OCI image (not yet tested here):** Proxmox can pull an OCI image into template storage (web UI: storage -> CT Templates -> *Pull from OCI registry*, registry `ghcr.io`; or `pveam`) and create an unprivileged container from it. Pin a tag, never `latest`. Application containers are a tech preview in 9.1, so the Debian-based provisioning above remains the supported LXC route. If you use OCI containers you must supply at run time what compose supplies: the env vars from `docker-compose.yml`, the three cert files (`api` -> `/run/db-certs/`, `db` -> `/run/input-certs/` as `ca.crt`, `server.crt`, `server.key`), a mount for `/var/lib/postgresql/data` on the `db` container, and a network where the API can resolve the host name `db`.
+
 ## Converting between them
 The data lives only in PostgreSQL, so conversion is a dump/restore of one database; schema and config are identical.
 ```bash

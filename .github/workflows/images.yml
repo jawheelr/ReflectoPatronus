@@ -1,0 +1,102 @@
+# Builds the container images and publishes them to ghcr.io.
+#   push to main      -> :main and :sha-<short>
+#   tag vX.Y.Z        -> :X.Y.Z, :X.Y, :latest
+#   pull requests     -> build only (nothing is pushed)
+# Images (linux/amd64 + linux/arm64):
+#   ghcr.io/<owner>/reflectopatronus-api   API + web console
+#   ghcr.io/<owner>/reflectopatronus-db    PostgreSQL 17 with the project's TLS / pg_hba config
+#   ghcr.io/<owner>/reflectopatronus-importer   legacy SQL Server -> PostgreSQL importer (ops use)
+# No secrets, certificates or legacy data are baked into any image (see .dockerignore).
+name: images
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            context: src/ReflectoPatronus.Api
+            file: src/ReflectoPatronus.Api/Dockerfile
+            web: true
+          - name: db
+            context: .
+            file: docker/postgres/Dockerfile
+            web: false
+          - name: importer
+            context: tools/importer
+            file: tools/importer/Dockerfile
+            web: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # The API image ships the React console from wwwroot (git-ignored), so build it first.
+      - uses: actions/setup-node@v4
+        if: matrix.web
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+      - name: Build web console
+        if: matrix.web
+        working-directory: src/web
+        run: |
+          npm ci --no-audit --no-fund --ignore-scripts
+          npm run build
+          rm -rf ../ReflectoPatronus.Api/wwwroot
+          mkdir -p ../ReflectoPatronus.Api/wwwroot
+          cp -r dist/. ../ReflectoPatronus.Api/wwwroot/
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/reflectopatronus-${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          labels: |
+            org.opencontainers.image.title=reflectopatronus-${{ matrix.name }}
+            org.opencontainers.image.description=ReflectoPatronus: a modern glass shop software
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          provenance: true
