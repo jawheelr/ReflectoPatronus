@@ -1,0 +1,12 @@
+# Run the published images from ghcr.io instead of building locally:
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env pull
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env up -d
+# Set RP_IMAGE_PREFIX / RP_TAG in .env to pin a fork or a release (defaults: this repo's owner, :main).
+# Needs Docker Compose >= 2.24 (for !reset).
+services:
+  api:
+    image: ${RP_IMAGE_PREFIX:-ghcr.io/jawheelr}/reflectopatronus-api:${RP_TAG:-main}
+    build: !reset null
+  db:
+    image: ${RP_IMAGE_PREFIX:-ghcr.io/jawheelr}/reflectopatronus-db:${RP_TAG:-main}
+    build: !reset null

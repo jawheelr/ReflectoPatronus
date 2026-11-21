@@ -66,6 +66,27 @@ pct exec 211 -- bash /opt/reflectopatronus/bundle/deploy/lxc/provision-api.sh
 ```
 Passwords must not contain `;` or `'` (they go into a connection string / SQL literal). `rp.env` contains secrets: delete it from the CT once provisioned, or keep it `chmod 600`.
 
+## Published images (ghcr.io)
+`.github/workflows/images.yml` builds `linux/amd64` + `linux/arm64` images on every push to `main` and every `v*` tag, and publishes them to GitHub Container Registry:
+
+| Image | Contents |
+|---|---|
+| `ghcr.io/jawheelr/reflectopatronus-api` | API + React console |
+| `ghcr.io/jawheelr/reflectopatronus-db` | PostgreSQL 17 with the project's TLS 1.3 / pg_hba config |
+| `ghcr.io/jawheelr/reflectopatronus-importer` | legacy SQL Server importer (operations use) |
+
+Tags: `main`, `sha-<short>`, and for releases `X.Y.Z`, `X.Y`, `latest`. Pull requests build but do not push. No secrets, certs or legacy data are in the images; they come in at run time exactly as with a local build. New GHCR packages are **private** until you change their visibility (repo -> Packages), or run `docker login ghcr.io` first.
+
+**Docker, from the registry:**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env pull
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env up -d
+./scripts/migrate.sh docker
+```
+Pin a release with `RP_TAG=1.0.0` in `.env`.
+
+**Proxmox VE 9.1+, LXC from an OCI image (not yet tested here):** Proxmox can pull an OCI image into template storage (web UI: storage -> CT Templates -> *Pull from OCI registry*, registry `ghcr.io`; or `pveam`) and create an unprivileged container from it. Pin a tag, never `latest`. Application containers are a tech preview in 9.1, so the Debian-based provisioning above remains the supported LXC route. If you use OCI containers you must supply at run time what compose supplies: the env vars from `docker-compose.yml`, the three cert files (`api` -> `/run/db-certs/`, `db` -> `/run/input-certs/` as `ca.crt`, `server.crt`, `server.key`), a mount for `/var/lib/postgresql/data` on the `db` container, and a network where the API can resolve the host name `db`.
+
 ## Converting between them
 The data lives only in PostgreSQL, so conversion is a dump/restore of one database; schema and config are identical.
 ```bash
