@@ -7,7 +7,7 @@ import { DocumentBrowser, TYPE_NAMES } from './DocumentBrowser'
 
 const TYPES = ['Q', 'W', 'I', 'C']
 
-/** GQ7 "Quote" window (the same window serves quotes, work orders, invoices and credits via Document Type). Read-only for now. */
+/** The legacy system "Quote" window (the same window serves quotes, work orders, invoices and credits via Document Type). Read-only for now. */
 export function QuoteWindow({ initialId }: { initialId?: number }) {
   const { me, open, setTitle } = useShell(), winId = useWinId()
   const [docType, setDocType] = useState('Q')

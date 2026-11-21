@@ -3,7 +3,7 @@ import * as api from '../api'
 import { money } from '../format'
 import { Modal, SkeletonRows, arrowMove } from '../shell/ui'
 
-/** GQ7 "Lookup Customers": search box, name/code list, address + phone preview of the highlighted row. */
+/** The legacy system "Lookup Customers": search box, name/code list, address + phone preview of the highlighted row. */
 export function CustomerLookup({ onPick, onClose }: { onPick: (id: number) => void; onClose: () => void }) {
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<'name' | 'code'>('name')

@@ -3,6 +3,7 @@ import * as api from '../api'
 import { CustomerEntry } from '../windows/CustomerEntry'
 import { DocumentBrowser } from '../windows/DocumentBrowser'
 import { QuoteWindow } from '../windows/QuoteWindow'
+import { DatabaseTransfer } from '../windows/DatabaseTransfer'
 import { SupplierPricing } from '../windows/SupplierPricing'
 import { SettingsWindow } from '../windows/SettingsWindow'
 import { TaxCodeEntry, TaxGroupEntry } from '../windows/TaxWindows'
@@ -12,8 +13,10 @@ import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing' }
-interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database' }
+interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
+const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
+const sep = (): MenuItem => ({ label: '', sep: true })
 const SAVED = 'rp.windows'
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -21,6 +24,14 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 function restore(): { wins: Win[]; active: string | null } {
   try { const s = JSON.parse(sessionStorage.getItem(SAVED) ?? 'null'); if (s && Array.isArray(s.wins)) return s } catch { /* ignore */ }
   return { wins: [], active: null }
+}
+
+function MenuList({ items, run }: { items: MenuItem[]; run: (i: MenuItem) => void }) {
+  return <ul>{items.map((i, n) => i.sep ? <li key={n} className="sep" role="separator" /> : (
+    <li key={i.label} className={i.children ? 'sub' : ''}>
+      <button disabled={i.disabled} onClick={() => run(i)}>{i.label}{i.children ? <span className="arrow">▸</span> : i.note ? <small> {i.note}</small> : null}</button>
+      {i.children && <MenuList items={i.children} run={run} />}
+    </li>))}</ul>
 }
 
 export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () => void; refreshMe: () => void }) {
@@ -70,18 +81,43 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
     document.addEventListener('keydown', k); return () => document.removeEventListener('keydown', k)
   }, [])
 
+  const themeItems: MenuItem[] = [
+    { label: (theme === 'light' ? '✓ ' : '') + 'Light', action: () => setTheme('light') },
+    { label: (theme === 'dark' ? '✓ ' : '') + 'Dark', action: () => setTheme('dark') },
+    { label: (theme === 'system' ? '✓ ' : '') + 'Match system', action: () => setTheme('system') },
+  ]
+  const admin = (items: MenuItem[]) => (me.isAdmin ? items : [])
   const menus: Record<string, MenuItem[]> = {
-    File: [{ label: 'Close Window', action: () => active && close(active), disabled: !active }, { label: 'Log Out', action: signOut }],
-    Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, { label: 'Payment', disabled: true, note: 'not built yet' }, { label: 'Documents', kind: 'documents' }],
-    Maintenance: [{ label: 'Customers', kind: 'customer' }, { label: 'Tax Code Entry', kind: 'taxcodes' }, { label: 'Tax Group Entry', kind: 'taxgroups' }],
-    Utilities: [{ label: 'Settings (time zone, devices)', kind: 'settings' }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }] : [])],
-    Reports: [{ label: 'No reports yet', disabled: true }],
-    View: [{ label: (theme === 'light' ? '✓ ' : '') + 'Light theme', action: () => setTheme('light') }, { label: (theme === 'dark' ? '✓ ' : '') + 'Dark theme', action: () => setTheme('dark') }, { label: (theme === 'system' ? '✓ ' : '') + 'Match system', action: () => setTheme('system') }],
-    Help: [{ label: 'About ReflectoPatronus', action: () => setAbout(true) }],
+    File: [{ label: 'Log Out', action: signOut }, { label: 'Close Window', action: () => active && close(active), disabled: !active },
+      ...soon('Change Password', 'User Profiles'), { label: 'Appearance', children: themeItems }],
+    Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, ...soon('Payment'), { label: 'Documents', kind: 'documents' }],
+    Maintenance: [
+      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, ...soon('Customer Categories', 'Customer Special Pricing', 'Vendor Entry')] },
+      { label: 'Miscellaneous', children: [...soon('Price Categories', 'Lossage Table', 'Markup Categories', 'Special Cuts Markup'), sep(), ...soon('Salesman/Installer', 'Advertising Codes', 'Payment Categories', 'Status Table')] },
+      { label: 'Parts', children: [...soon('Flat Glass Types', 'Fabrications', 'Flat Glass Parts'), sep(), ...soon('Part Categories', 'Lookup Categories', 'Add-on Parts', 'GL Accts')] },
+      { label: 'Taxes', children: [{ label: 'Tax Codes Entry', kind: 'taxcodes' }, { label: 'Tax Groups Entry', kind: 'taxgroups' }] },
+    ],
+    Utilities: [
+      ...soon('Company Information', 'Enterprise Information', 'Reprint Document'),
+      { label: 'Delete Options', children: soon('Delete Payments', 'Delete Deposits', 'Delete Inactive Customers', 'Delete Quotes', 'Void Invoice', 'Void Work Order', 'Void Credit Invoice', 'Remove Finance Charges') },
+      { label: 'Invoice File', children: soon('Apply Credits', 'Edit Flat Glass Invoice') },
+      ...admin([{ label: 'Perform Cost Increase / Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }]),
+      sep(), { label: 'Settings (time zone, devices)', kind: 'settings' },
+    ],
+    Reports: [
+      { label: 'Sales', children: soon('Sales Breakdown', 'Sales by Customer Category', 'Sales Detail by Agent', 'Sales by Agent', 'Tax Breakdown', 'Sales by Advertising Code', 'Sales By Ad Code By ZIP', 'Flat Glass Sales by Part Category', 'Invoice Profitability', 'Cost of Goods Sold', 'Gross Sales & Royalties') },
+      { label: 'Receivables', children: soon('Aged Open Invoices', 'Statements', 'List Finance Charges', 'List Payments', 'Payment Breakdown', 'Payments by User') },
+      { label: 'Accounts', children: soon('Print Customer List', 'List Customer Categories', 'Customer Special Pricing List', 'Customer Address Labels', 'Customer History Report', 'Bill-To Sales Detail', 'Vendors') },
+      { label: 'Salesmen/Installers', children: soon('List Salesman', 'List Installers', 'Salesman Totals', 'Installer Totals', 'Labor Productivity', 'Work Order Status') },
+      { label: 'File Listing', children: [...soon('List Part Categories', 'List Add-On Parts'), sep(), ...soon('List Quotes, WO\'s, Invoices', 'Print Work Order Labels', 'Invoice Edit Notes'), sep(),
+        ...soon('List Price Categories', 'List Markup Categories', 'List Advertising Codes'), sep(), ...soon('List Flat Glass Types', 'List Fabrications', 'List Flat Glass Parts'), sep(), ...soon('List Users', 'List Companies')] },
+      ...soon('Ordering'),
+    ],
+    Help: [...soon('Online Help'), { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
   }
-  const run = (i: MenuItem) => { setMenu(null); if (i.disabled) return; if (i.kind) open(i.kind, i.arg); i.action?.() }
+  const run = (i: MenuItem) => { if (i.disabled || i.children) return; setMenu(null); if (i.kind) open(i.kind, i.arg); i.action?.() }
   const commands = [{ label: 'Flat Glass Quote', kind: 'quote' as Kind }, { label: 'Customer Entry', kind: 'customer' as Kind }, { label: 'Documents', kind: 'documents' as Kind },
-    { label: 'Tax Code Entry', kind: 'taxcodes' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }] : [])]
+    { label: 'Tax Code Entry', kind: 'taxcodes' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : [])]
 
   return (
     <ShellContext.Provider value={{ me, open, close, setTitle, refreshMe, toast }}>
@@ -90,7 +126,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
           {Object.entries(menus).map(([name, items]) => (
             <div key={name} className="menu">
               <button className={menu === name ? 'on' : ''} onClick={() => setMenu(menu === name ? null : name)} onMouseEnter={() => menu && setMenu(name)}>{name}</button>
-              {menu === name && <ul>{items.map(i => <li key={i.label}><button disabled={i.disabled} onClick={() => run(i)}>{i.label}{i.note && <small> ({i.note})</small>}</button></li>)}</ul>}
+              {menu === name && <MenuList items={items} run={run} />}
             </div>
           ))}
           <span className="spacer" />
@@ -130,6 +166,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'documents' && <div className="form"><DocumentBrowser /></div>}
                     {w.kind === 'settings' && <SettingsWindow />}
                     {w.kind === 'pricing' && <SupplierPricing />}
+                    {w.kind === 'transfer' && <DatabaseTransfer />}
                     {w.kind === 'taxcodes' && <TaxCodeEntry />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}
                   </WinIdContext.Provider>
@@ -140,7 +177,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
         </div>
         <footer className="statusbar"><span>{me.code}</span><span>{me.timeZone}</span><span className="spacer" /><span>Ver. 0.1.0</span></footer>
         {palette && <CommandPalette commands={commands} open={open} onClose={() => setPalette(false)} />}
-        {about && <Modal title="About" onClose={() => setAbout(false)} width={420}><div className="lookup-body"><p><strong>ReflectoPatronus</strong> 0.1.0</p><p>A modern glass shop software, replacing GlassQuote 7 and running on PostgreSQL.</p><p>Developer: Jarred Wheeler</p><p className="muted">Customers, documents and tax setup are read-only for now.</p></div></Modal>}
+        {about && <Modal title="About" onClose={() => setAbout(false)} width={420}><div className="lookup-body"><p><strong>ReflectoPatronus</strong> 0.1.0</p><p>A modern glass shop software, replacing the legacy system and running on PostgreSQL.</p><p>Developer: Jarred Wheeler</p><p className="muted">Customers, documents and tax setup are read-only for now.</p></div></Modal>}
         <div className="toasts" role="status" aria-live="polite">{toasts.map(t => <div key={t.id} className={'toast ' + t.kind}>{t.message}</div>)}</div>
       </div>
     </ShellContext.Provider>

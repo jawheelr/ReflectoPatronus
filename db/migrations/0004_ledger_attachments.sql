@@ -1,6 +1,6 @@
 -- 0004: payments, AR ledger, attachments, audit, import support.
 
-CREATE TABLE payment (                         -- GQPAY (28k rows)
+CREATE TABLE payment (                         -- legacy PAY (28k rows)
     paid_at timestamptz NOT NULL,
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id integer NOT NULL REFERENCES customer(id),
@@ -12,7 +12,7 @@ CREATE TABLE payment (                         -- GQPAY (28k rows)
 );
 CREATE INDEX payment_customer ON payment (customer_id, paid_at DESC);
 
--- GQAR (70k rows) stored debit and credit columns, but never both on one row (verified), so one SIGNED amount
+-- legacy AR (70k rows) stored debit and credit columns, but never both on one row (verified), so one SIGNED amount
 -- (debit positive, credit negative) is lossless and halves the columns. The polymorphic ar_parent_id/ar_parent_src
 -- pair is replaced by real foreign keys.
 --   purpose 1 = invoice debit, 4/5 = payment credit applied, 3 = paired transfer between two invoices.
@@ -31,10 +31,10 @@ CREATE INDEX ar_entry_customer ON ar_entry (customer_id) INCLUDE (amount);
 CREATE INDEX ar_entry_document ON ar_entry (document_id) INCLUDE (amount);
 CREATE INDEX ar_entry_payment ON ar_entry (payment_id) WHERE payment_id IS NOT NULL;
 
-CREATE VIEW customer_balance AS               -- replaces GQ7 CustomerBalance
+CREATE VIEW customer_balance AS               -- replaces the legacy system CustomerBalance
 SELECT customer_id, sum(amount) AS balance FROM ar_entry GROUP BY customer_id;
 
-CREATE VIEW receivable AS                     -- replaces GQ7 Receivables
+CREATE VIEW receivable AS                     -- replaces the legacy system Receivables
 SELECT customer_id, document_id,
        sum(amount) AS balance,
        sum(amount) FILTER (WHERE amount > 0)  AS debits,
@@ -42,7 +42,7 @@ SELECT customer_id, document_id,
        max(created_at) AS last_activity_at
 FROM ar_entry GROUP BY customer_id, document_id;
 
--- Attachments: 98% of the GQ7 database (9.8 GB of 10 GB) was photos in one varbinary column.
+-- Attachments: 98% of the legacy system database (9.8 GB of 10 GB) was photos in one varbinary column.
 -- Split metadata from bytes, and store each distinct file once (content-addressed by SHA-256).
 -- STORAGE EXTERNAL: JPEG/PDF/PNG are already compressed; skip pglz attempts (saves CPU, keeps fast partial reads).
 CREATE TABLE attachment_blob (
@@ -63,7 +63,7 @@ CREATE TABLE attachment (
 CREATE INDEX attachment_document ON attachment (document_id);
 CREATE INDEX attachment_sha ON attachment (sha256);
 
--- GQUserLog (265k rows): who touched/deleted which row. Kept for history; not used by the app.
+-- legacy UserLog (265k rows): who touched/deleted which row. Kept for history; not used by the app.
 CREATE TABLE legacy_audit_log (
     at timestamptz NOT NULL,
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -74,13 +74,13 @@ CREATE TABLE legacy_audit_log (
 );
 CREATE INDEX legacy_audit_log_row ON legacy_audit_log (table_name, row_id);
 
--- Single-row/unmodelled GQ7 configuration kept verbatim (QuickBooks mapping, enterprise row, dot-matrix printers).
+-- Single-row/unmodelled the legacy system configuration kept verbatim (QuickBooks mapping, enterprise row, dot-matrix printers).
 CREATE TABLE legacy_config (
     key text PRIMARY KEY,
     value jsonb NOT NULL
 );
 
--- Rows the importer could not attach to a parent (GQ7 had no foreign keys; deleted parents left orphans).
+-- Rows the importer could not attach to a parent (the legacy system had no foreign keys; deleted parents left orphans).
 -- Kept as JSON for audit and so nothing is silently lost; never read by the app.
 CREATE TABLE import_quarantine (
     imported_at timestamptz NOT NULL DEFAULT now(),

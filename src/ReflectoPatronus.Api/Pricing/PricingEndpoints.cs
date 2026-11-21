@@ -20,14 +20,7 @@ public static class PricingEndpoints
 
     public static void Map(RouteGroupBuilder api)
     {
-        var g = api.MapGroup("/pricing").AddEndpointFilter(async (ctx, next) =>
-        {
-            var db = ctx.HttpContext.RequestServices.GetRequiredService<NpgsqlDataSource>();
-            await using var c = db.CreateCommand("SELECT is_admin FROM app_user WHERE id = $1");
-            c.Parameters.AddWithValue(ctx.HttpContext.User.UserId());
-            return (bool)(await c.ExecuteScalarAsync(ctx.HttpContext.RequestAborted) ?? false)
-                ? await next(ctx) : Results.Json(new { error = "Administrator access required." }, statusCode: 403);
-        });
+        var g = api.MapGroup("/pricing").RequireAdmin();
 
         g.MapGet("/suppliers", ListSuppliers);
         g.MapPost("/suppliers", (SupplierInput i, NpgsqlDataSource db, CancellationToken ct) => SaveSupplier(null, i, db, ct));

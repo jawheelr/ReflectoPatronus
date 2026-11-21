@@ -147,3 +147,16 @@ export const recalculate = () => call<IngestResult>('/pricing/recalculate', { me
 export const getBatches = (status = '') => call<Batch[]>(`/pricing/batches?status=${status}`)
 export const getBatch = (id: number) => call<BatchChange[]>(`/pricing/batches/${id}`)
 export const decideBatch = (id: number, approve: boolean) => call<{ status: string; pricesUpdated: number }>(`/pricing/batches/${id}/${approve ? 'approve' : 'reject'}`, { method: 'POST' })
+
+// ---- database export / import (admin only) ----
+export interface TransferTable { table: string; inserted: number; updated: number; skipped: number; deleted: number }
+export interface TransferResult { mode: string; overwrite: boolean; dryRun: boolean; applied: boolean; inserted: number; updated: number; skipped: number; deleted: number; tables: TransferTable[] }
+export async function exportDb(attachments: boolean): Promise<Blob> {
+  const path = `/admin/export?attachments=${attachments}`
+  let r = await raw(path)
+  if (r.status === 401 && await refresh()) r = await raw(path)
+  if (!r.ok) throw await errorOf(r)
+  return r.blob()
+}
+export const importDb = (file: File, mode: 'merge' | 'replace', overwrite: boolean, dryRun: boolean) =>
+  call<TransferResult>(`/admin/import?mode=${mode}&overwrite=${overwrite}&dryRun=${dryRun}`, { method: 'POST', body: file })

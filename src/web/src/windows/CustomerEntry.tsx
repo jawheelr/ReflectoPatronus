@@ -6,7 +6,7 @@ import { Audit, Field, RO, Tabs, Toolbar } from '../shell/ui'
 import { CustomerLookup } from './CustomerLookup'
 import { DocumentBrowser } from './DocumentBrowser'
 
-// GQ7 labelled its five phone slots like this (Customer Entry screen).
+// the legacy system labelled its five phone slots like this (Customer Entry screen).
 const PHONE_LABELS = ['Cell', 'Work', 'Home', 'Pager', 'Other']
 
 export function CustomerEntry({ initialId }: { initialId?: number }) {

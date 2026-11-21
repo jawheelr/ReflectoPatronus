@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""GlassQuote 7 (SQL Server) -> ReflectoPatronus (PostgreSQL) one-off importer.
+"""the legacy system (SQL Server) -> ReflectoPatronus (PostgreSQL) one-off importer.
 
 Design rules (see docs/DB-DESIGN.md):
   * The legacy database is only ever READ.
   * Legacy ids are preserved as primary keys (INSERT ... OVERRIDING SYSTEM VALUE, then setval).
-  * Rows whose parent no longer exists (GQ7 had no foreign keys) go to import_quarantine, never silently dropped.
+  * Rows whose parent no longer exists (the legacy system had no foreign keys) go to import_quarantine, never silently dropped.
   * Columns the model drops are scanned: constant/empty ones are discarded and reported; a real value in a
     non-constant dropped column is preserved in that row's legacy_extra JSON. Secrets are never imported.
   * Everything runs in ONE transaction (except attachments, which commit in batches and are resumable), so
@@ -30,7 +30,7 @@ SENTINEL_BEFORE = dt.datetime(1901, 1, 1)           # Delphi/Access "null date" 
 AUDIT_COL = re.compile(r"^(create|update)_(userid|timestamp)$")
 # Never imported and never copied into legacy_extra (credentials / card data / tokens).
 SECRET_COLS = {"user_password", "cmpy_smtppassword", "cmpy_qixpassword", "ent_kusttoken", "cust_creditcard"}
-# Dropped on purpose: GQ7 data-conversion batch markers (values 1899-12-30, 2012-09-10, 2018-xx) and print-queue dates.
+# Dropped on purpose: the legacy system data-conversion batch markers (values 1899-12-30, 2012-09-10, 2018-xx) and print-queue dates.
 IGNORE_COLS = {"inv_transdate", "inv_reqenddate", "inv_referraldate", "inv_reqdate", "pay_transdate",
                "inv_agrss_install_time", "inv_agrss_driveaway_time"}
 LINE_SOURCE = {"G": "glass", "P": "part", "LAA": "labor", "USR": "custom"}
@@ -62,7 +62,7 @@ def ts(v):
 
 
 def nz(v):
-    """Zero -> NULL for optional numeric columns (GQ7 used 0 for 'unset')."""
+    """Zero -> NULL for optional numeric columns (the legacy system used 0 for 'unset')."""
     return None if v is None or v == 0 else v
 
 
@@ -140,9 +140,9 @@ class Importer:
             cols = ["code"] + list(extra)
             vals = [code] + list(extra.values())
             if table in ("price_category", "customer_category", "pay_category"):
-                cols.append("description"); vals.append("imported placeholder: code used by data but not defined in GQ7")
+                cols.append("description"); vals.append("imported placeholder: code used by data but not defined in the legacy system")
             if table == "tax_group":
-                cols.append("description"); vals.append("imported placeholder: code used by data but not defined in GQ7")
+                cols.append("description"); vals.append("imported placeholder: code used by data but not defined in the legacy system")
             self.cur.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))})", vals)
             self.known[table].add(code)
             self.placeholders[table].add(code)
@@ -357,7 +357,7 @@ class Importer:
     def ensure_tax_code(self, code):
         if code not in self.known["tax_code"]:
             self.cur.execute("INSERT INTO tax_code (code, description, percent) VALUES (%s, %s, 0)",
-                             (code, "imported placeholder: code used by data but not defined in GQ7"))
+                             (code, "imported placeholder: code used by data but not defined in the legacy system"))
             self.known["tax_code"].add(code)
             self.placeholders["tax_code"].add(code)
 
@@ -933,12 +933,12 @@ class Importer:
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--mssql-host", default=os.environ.get("MSSQL_HOST", "gq7-mssql"))
+    p.add_argument("--mssql-host", default=os.environ.get("MSSQL_HOST", "legacy-mssql"))
     p.add_argument("--mssql-port", type=int, default=int(os.environ.get("MSSQL_PORT", "1433")))
     p.add_argument("--mssql-user", default=os.environ.get("MSSQL_USER", "sa"))
-    p.add_argument("--mssql-db", default=os.environ.get("MSSQL_DB", "gqdata"))
+    p.add_argument("--mssql-db", default=os.environ.get("MSSQL_DB", "legacydata"))
     p.add_argument("--tz", default=os.environ.get("IMPORT_TZ", "America/Chicago"),
-                   help="time zone the GQ7 (naive) timestamps were recorded in")
+                   help="time zone the legacy system (naive) timestamps were recorded in")
     p.add_argument("--dry-run", action="store_true", help="run everything, report, roll back (attachments skipped)")
     p.add_argument("--reset", action="store_true", help="wipe previously imported data in the target first")
     p.add_argument("--skip-attachments", action="store_true")

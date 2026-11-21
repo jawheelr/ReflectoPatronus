@@ -1,6 +1,6 @@
-# GlassQuote 7 database: schema discovery
+# The legacy system database: schema discovery
 
-Source: `Copy.bak`, full backup of database `gqdata`, taken on SQL Server 2014 (MSSQL12, instance `QUEST`), 2026-11-18. Restored read-only into a throwaway SQL Server 2022 container for inspection. **This document contains structure only, no customer data.**
+Source: `Copy.bak`, full backup of the legacy database (restored as `legacydata`), taken on SQL Server 2014 (MSSQL12, instance `QUEST`), 2026-11-18. Restored read-only into a throwaway SQL Server 2022 container for inspection. **This document contains structure only, no customer data.**
 
 ## Summary
 - 99 tables (about 39 hold data), 12 views, **0 foreign keys, 0 triggers, 0 stored procedures** (some scalar functions exist, e.g. `dbo.InvDocNum`). Relationships are implicit in column names (`*_CustId`, `Lin_InvId`, `Prc_FptId`, `Att_InvId`) and must be inferred and verified during import.

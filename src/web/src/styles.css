@@ -1,4 +1,4 @@
-/* Layout mirrors GlassQuote 7 (menu bar, Quick Launch / Open Windows panel, windows, status bar); the look is modern. */
+/* Layout mirrors the legacy system (menu bar, Quick Launch / Open Windows panel, windows, status bar); the look is modern. */
 :root { color-scheme: light; --ink: #1c2430; --muted: #6b7686; --line: #dfe3e8; --bg: #eef1f5; --panel: #fff; --accent: #2b62c9; --accent-dark: #1d4a9e; --side: #e6ebf3;
   --surface2: #f4f6fa; --ro: #f7f8fa; --hover: #e8f0fd; --menuon: #dfe8f7; --field: #c4cbd6; --shadow: rgba(20,30,50,.15); --link: #1d4a9e; --th: #3b4658;
   font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--ink); background: var(--bg); }
@@ -125,3 +125,11 @@ kbd { font: inherit; font-size: .75rem; padding: .05rem .4rem; border: 1px solid
 .filebtn:hover { background: var(--hover); }
 .grid-table tr.sel td { background: var(--hover); }
 .grid-table tbody tr[class] { cursor: pointer; }
+.menu li { position: relative; } .menu li.sep { height: 1px; margin: .25rem 0; background: var(--line); }
+.menu li button .arrow { float: right; margin-left: 1rem; opacity: .6; }
+.menu li button:disabled { opacity: .45; cursor: default; }
+.menu li:not(.sub) button:not(:disabled):hover, .menu li.sub:hover > button { background: var(--menuon); }
+.menu li > ul { display: none; top: -.25rem; left: 100%; } .menu li.sub:hover > ul, .menu li.sub:focus-within > ul { display: block; }
+.radios { border: 1px solid var(--line); border-radius: 6px; padding: .5rem .8rem; display: grid; gap: .4rem; }
+.radios .indent { margin-left: 1.6rem; }
+.error { color: #c0392b; }

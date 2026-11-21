@@ -1,10 +1,10 @@
 -- 0003: documents (quotes / work orders / invoices / credits), lines, tax, installers, revisions.
--- GQ7 kept all four document kinds in one table (GQINV), distinguished by Inv_Doc_Type; so do we.
+-- The legacy system kept all four document kinds in one table (legacy INV), distinguished by Inv_Doc_Type; so do we.
 -- Only flat-glass ('F') documents exist in the export; the Inv_A_* auto-glass, EDI, claims and Qix columns were
 -- 100% empty and are intentionally not carried over (importer asserts they are empty before dropping them).
 
 CREATE TYPE line_source AS ENUM ('glass', 'part', 'labor', 'custom');
--- GQ7 Lin_Source: G -> glass, P -> part, LAA -> labor, USR -> custom (user-entered lines, ~66% are zero-amount text).
+-- The legacy system Lin_Source: G -> glass, P -> part, LAA -> labor, USR -> custom (user-entered lines, ~66% are zero-amount text).
 
 CREATE TABLE document (
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -13,8 +13,8 @@ CREATE TABLE document (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     company_id integer NOT NULL DEFAULT 1,
     doc_number integer NOT NULL,
-    customer_id integer REFERENCES customer(id),            -- NULL for 931 GQ7 docs whose customer no longer exists
-    bill_to_customer_id integer REFERENCES customer(id),    -- NULL = same as customer (differs on only 3 GQ7 docs)
+    customer_id integer REFERENCES customer(id),            -- NULL for 931 the legacy system docs whose customer no longer exists
+    bill_to_customer_id integer REFERENCES customer(id),    -- NULL = same as customer (differs on only 3 the legacy system docs)
     staff_sales_id integer REFERENCES staff(id),
     doc_date date NOT NULL,
     loss_date date,
@@ -52,7 +52,7 @@ CREATE INDEX document_po ON document (po_number) WHERE po_number IS NOT NULL;
 CREATE INDEX document_claim ON document (claim_number) WHERE claim_number IS NOT NULL;
 CREATE INDEX document_source ON document (source_doc_number) WHERE source_doc_number IS NOT NULL;
 
--- 278k rows in GQ7 at 45 columns (~800 bytes/row on disk); 22 of those columns were always empty/constant.
+-- 278k rows in the legacy system at 45 columns (~800 bytes/row on disk); 22 of those columns were always empty/constant.
 CREATE TABLE document_line (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     document_id integer NOT NULL REFERENCES document(id) ON DELETE CASCADE,
@@ -64,14 +64,14 @@ CREATE TABLE document_line (
     uom_price numeric(14,2),
     uom_units numeric(14,4),
     seq smallint NOT NULL,
-    parent_seq smallint,                       -- references document_line.seq within the same document (verified in GQ7)
+    parent_seq smallint,                       -- references document_line.seq within the same document (verified in the legacy system)
     thick_num smallint, thick_den smallint,
     source line_source NOT NULL,
     taxable boolean NOT NULL DEFAULT false,
     amount_override boolean NOT NULL DEFAULT false,
     list_override boolean NOT NULL DEFAULT false,
     special_price boolean NOT NULL DEFAULT false,
-    part_code text,                            -- snapshot, NOT an FK: 40 GQ7 line part codes are not in the parts table
+    part_code text,                            -- snapshot, NOT an FK: 40 the legacy system line part codes are not in the parts table
     description text,
     dims text,
     shape text,
@@ -85,7 +85,7 @@ CREATE TABLE document_tax (
     document_id integer NOT NULL REFERENCES document(id) ON DELETE CASCADE,
     tax_code text NOT NULL REFERENCES tax_code(code),
     percent numeric(7,4) NOT NULL,             -- snapshot of the rate at the time
-    amount numeric(14,2) NOT NULL,             -- authoritative: GQ7 rounding rules live in app code, not reproducible from percent
+    amount numeric(14,2) NOT NULL,             -- authoritative: the legacy system rounding rules live in app code, not reproducible from percent
     UNIQUE (document_id, tax_code)
 );
 
@@ -99,7 +99,7 @@ CREATE TABLE document_installer (
 );
 CREATE INDEX document_installer_doc ON document_installer (document_id);
 
-CREATE TABLE document_revision (               -- GQREVISE: total snapshot each time a document was revised
+CREATE TABLE document_revision (               -- legacy REVISE: total snapshot each time a document was revised
     at timestamptz NOT NULL,
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     document_id integer NOT NULL REFERENCES document(id) ON DELETE CASCADE,
@@ -109,7 +109,7 @@ CREATE TABLE document_revision (               -- GQREVISE: total snapshot each 
 );
 CREATE INDEX document_revision_doc ON document_revision (document_id, at DESC);
 
-CREATE TABLE document_status_event (           -- GQInvStatus
+CREATE TABLE document_status_event (           -- legacy InvStatus
     at timestamptz,
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     document_id integer NOT NULL REFERENCES document(id) ON DELETE CASCADE,
@@ -118,7 +118,7 @@ CREATE TABLE document_status_event (           -- GQInvStatus
     note text
 );
 
--- Derived totals. GQ7 stored none. IMPORTANT: GQ7's own InvoiceTotals view is NOT the source of truth for
+-- Derived totals. The legacy system stored none. IMPORTANT: the legacy system's own InvoiceTotals view is NOT the source of truth for
 -- flat glass (its NULL-comparison predicates drop non-labor lines). Verified against the data: total =
 -- SUM(line amount) + SUM(tax amount), matching the AR ledger debit on 30,635 of 30,641 invoices.
 CREATE VIEW document_totals AS

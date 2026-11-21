@@ -1,7 +1,7 @@
 # Architecture decisions (initial)
 
 ## System shape: central server, API-only clients
-One central server (Docker or Proxmox LXC, see DEPLOYMENT.md) runs PostgreSQL and the API. **Every client talks to the API; none talks to PostgreSQL** (unlike GQ7, whose desktop clients connected straight to SQL Server). Logins, permissions and the totals rules live in the API.
+One central server (Docker or Proxmox LXC, see DEPLOYMENT.md) runs PostgreSQL and the API. **Every client talks to the API; none talks to PostgreSQL** (unlike the legacy system, whose desktop clients connected straight to SQL Server). Logins, permissions and the totals rules live in the API.
 
 | Client | Technology | Notes |
 |---|---|---|
@@ -11,8 +11,8 @@ One central server (Docker or Proxmox LXC, see DEPLOYMENT.md) runs PostgreSQL an
 
 Decisions that follow from this:
 - **API first.** All clients depend on one versioned REST contract published as OpenAPI (`/api/v1`). The TypeScript and Swift clients are generated from it. No client is built before the API slice it needs exists.
-- **Per-device sign-in.** Each user signs in on each device. Short-lived access tokens plus refresh tokens that are bound to a device record, so a lost laptop or iPad can be revoked without affecting anyone else. User authentication is separate from the API's own database mTLS identity. Passwords are never imported from GQ7.
-- **Time zones.** Instants are stored as `timestamptz` and sent as UTC. Each client renders them in the user's chosen zone: a per-user setting held on the server (default: the device's zone) with a company default. Plain dates (document dates) are never shifted. The importer's `--tz` is unrelated: it only states what zone GQ7 recorded its naive timestamps in.
+- **Per-device sign-in.** Each user signs in on each device. Short-lived access tokens plus refresh tokens that are bound to a device record, so a lost laptop or iPad can be revoked without affecting anyone else. User authentication is separate from the API's own database mTLS identity. Passwords are never imported from the legacy system.
+- **Time zones.** Instants are stored as `timestamptz` and sent as UTC. Each client renders them in the user's chosen zone: a per-user setting held on the server (default: the device's zone) with a company default. Plain dates (document dates) are never shifted. The importer's `--tz` is unrelated: it only states what zone the legacy system recorded its naive timestamps in.
 - Only the API and explicitly authorized migration/backup workers access PostgreSQL.
 - PostgreSQL's port remains private (internal Docker network / private Proxmox bridge with firewall rules).
 

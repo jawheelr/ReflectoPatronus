@@ -6,4 +6,4 @@ if [ -f /certs/admin-client.key ]; then
   export PGSSLKEY=/tmp/admin-client.key PGSSLCERT=/certs/admin-client.crt PGSSLROOTCERT=/certs/ca.crt
   export PGSSLMODE="${PGSSLMODE:-verify-full}"
 fi
-exec python -u /app/import_gq7.py "$@"
+exec python -u /app/import_legacy.py "$@"

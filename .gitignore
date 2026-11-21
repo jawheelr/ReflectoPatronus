@@ -7,7 +7,7 @@ certs/*
 *.user
 *.suo
 
-# Legacy GlassQuote data (never commit)
+# Legacy the legacy system data (never commit)
 legacy/*
 !legacy/.gitkeep
 *.bak

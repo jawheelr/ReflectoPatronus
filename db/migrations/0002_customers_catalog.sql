@@ -24,7 +24,7 @@ CREATE TABLE customer (
     tax_group text REFERENCES tax_group(code),
     price_category text REFERENCES price_category(code),
     category text REFERENCES customer_category(code),
-    note_printed text,                         -- was GQNote via Cust_NotId (inlined: one note per owner)
+    note_printed text,                         -- was legacy Note via Cust_NotId (inlined: one note per owner)
     note_internal text
 );
 -- Customer search is by name fragment and phone; trigram index makes ILIKE '%smi%' index-assisted.
@@ -32,7 +32,7 @@ CREATE INDEX customer_name_trgm ON customer
     USING gin ((lower(last_name || ' ' || coalesce(first_name, ''))) gin_trgm_ops);
 CREATE INDEX customer_zip ON customer (zip);
 
--- GQCUST had five fixed phone/ext column pairs, 4 of them nearly empty. Normalised: only real numbers cost space.
+-- legacy CUST had five fixed phone/ext column pairs, 4 of them nearly empty. Normalised: only real numbers cost space.
 CREATE TABLE customer_phone (
     customer_id integer NOT NULL REFERENCES customer(id) ON DELETE CASCADE,
     slot smallint NOT NULL CHECK (slot BETWEEN 1 AND 5),   -- GQ position preserved (may carry meaning)
@@ -66,7 +66,7 @@ CREATE TABLE part_thickness (                  -- FGPartThick (342 rows)
     UNIQUE (part_id, thick_num, thick_den)
 );
 
--- FGPricing (3,228 rows). NOTE: in the GQ7 export 2,202 rows reference a part_thickness id that does not exist.
+-- FGPricing (3,228 rows). NOTE: in the legacy system export 2,202 rows reference a part_thickness id that does not exist.
 -- The importer cannot enforce an FK for them: orphans go to import_quarantine, and this FK covers the rest.
 CREATE TABLE part_price (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

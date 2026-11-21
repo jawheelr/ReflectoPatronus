@@ -33,7 +33,7 @@ export function Tabs({ tabs, active, onChange }: { tabs: string[]; active: strin
   return <div className="tabs" role="tablist">{tabs.map(t => <button key={t} role="tab" aria-selected={t === active} className={t === active ? 'on' : ''} onClick={() => onChange(t)}>{t}</button>)}</div>
 }
 
-/** Label + read-only value, laid out like GQ7's form fields. */
+/** Label + read-only value, laid out like the legacy system's form fields. */
 export function Field({ label, children, wide }: { label: string; children?: ReactNode; wide?: boolean }) {
   return <label className={'field' + (wide ? ' wide' : '')}><span>{label}</span><div className="val">{children}</div></label>
 }
