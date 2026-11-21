@@ -1,0 +1,12 @@
+# Root-context builds (db image) must never ship legacy data, secrets or VCS metadata.
+legacy/
+certs/
+.env
+.git/
+**/*.bak
+**/*.mdf
+**/*.ldf
+**/bin/
+**/obj/
+**/.DS_Store
+**/._*

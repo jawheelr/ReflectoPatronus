@@ -1,0 +1,28 @@
+.env
+certs/*
+!certs/.gitkeep
+**/bin/
+**/obj/
+.DS_Store
+*.user
+*.suo
+
+# Legacy the legacy system data (never commit)
+legacy/*
+!legacy/.gitkeep
+*.bak
+*.mdf
+*.ldf
+
+# Build output
+dist/
+
+# Importer reports (contain row-level legacy data references)
+out/
+
+__pycache__/
+*.pyc
+
+src/ReflectoPatronus.Api/wwwroot/
+._*
+.DS_Store

@@ -1,0 +1,57 @@
+# API (v1)
+
+Base path `/api/v1`. The machine-readable contract is [docs/openapi/v1.json](openapi/v1.json); the TypeScript (web/desktop) and Swift (iOS/iPadOS) clients are generated from it. Re-export it after changing endpoints: `curl localhost:8080/openapi/v1.json` (served only when `ASPNETCORE_ENVIRONMENT=Development` or `OpenApi__Enabled=true`).
+
+## Authentication (per device)
+- `POST /auth/login` `{userCode, password, deviceName, platform}` (platform: `web|desktop|ios|ipados|other`) returns an access token (15 min) and refresh token (30 days) bound to **one device session**.
+- Send `Authorization: Bearer <accessToken>`. Tokens are opaque 256-bit values; only their SHA-256 is stored.
+- `POST /auth/refresh` `{refreshToken}` rotates both tokens; the old refresh token stops working immediately.
+- `POST /auth/logout` ends the current session. `GET /me/sessions` lists your signed-in devices; `DELETE /me/sessions/{id}` revokes one (a lost laptop or iPad) without affecting the others.
+- Every endpoint requires sign-in except `auth/login`, `auth/refresh` and `/health/*`. 5 failed logins lock the account for 15 minutes; failures for unknown users, bad passwords and locked accounts are indistinguishable.
+- **First run:** set `BOOTSTRAP_ADMIN_USER` and `BOOTSTRAP_ADMIN_PASSWORD` (12+ chars) in `.env`. They create that user only if *no* user has a password yet (imported the legacy system users have none by design). Remove them afterwards.
+
+## Time zones
+`GET /me` returns the effective `timeZone` (user setting, else company default). `PUT /me/settings {"timeZone": "America/New_York"}` sets it (`null` clears it); names are validated against the server's tz database; `GET /timezones` lists valid names for a picker. Instants are sent as UTC and rendered by the client in this zone; plain dates are never shifted.
+
+## Customers
+- `GET /customers?q=&limit=&offset=`: `q` digits-only = account-number/phone prefix, otherwise name fragment (trigram-indexed) or account-number prefix; `%` and `_` are matched literally. Max `limit` 100; `hasMore` replaces a slow total count.
+- `GET /customers/{id}`: full record, phones, balance (sum of the AR ledger).
+
+## Documents (quotes, work orders, invoices, credits)
+- `GET /documents?type=&customerId=&q=&from=&to=&includeVoided=&limit=&offset=`: newest first. `type` is `Q` quote, `W` work order, `I` invoice, `C` credit memo. `q` matches document number (prefix), PO number (prefix) or customer name (fragment, as printed on the document). `from`/`to` are inclusive document dates (`YYYY-MM-DD`). Voided documents are hidden unless `includeVoided=true`. Max `limit` 100; `hasMore` replaces a total count. Totals are computed only for the returned page.
+- `GET /documents/{id}`: header, customer snapshot as printed (the current customer record may differ), job site, lines, tax lines, installers, status history, revisions and `totals`.
+- **Totals rule:** `total = SUM(line amount) + SUM(tax amount)`; the breakdown (`glass`, `part`, `labor`, `custom`, `taxable`) is by line source. This equals the AR invoice debit on every loaded invoice (see [DB-DESIGN.md](DB-DESIGN.md)); the legacy system's own totals view is not used.
+- Read-only for now: creating and editing documents comes next, with server-side pricing.
+- The `R` type (2 legacy rows, unclassified) is listed but cannot be filtered with `type=R` meaningfully until its meaning is confirmed.
+
+## Testing
+`scripts/smoke-api.sh` runs 41 end-to-end checks against a running stack (auth, rotation, revocation, time zones, customer and document search, totals consistency, injection and wildcard handling).
+
+## Supplier pricing (admin only)
+`app_user.is_admin` gates everything under `/api/v1/pricing` (403 otherwise; `GET /me` returns `isAdmin`). The bootstrap admin is an admin.
+
+Selling price (`part_price.price1`) = supplier unit cost x link factor x (1 + category `markup_pct`/100), rounded to cents. Categories with no markup are never touched. **Nothing changes live prices except approving a batch**; quotes/invoices keep their own prices.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET/POST /pricing/suppliers`, `PUT/DELETE /pricing/suppliers/{id}` | Suppliers: source `manual`, `upload` or `feed` (https URL, optional write-only auth header, refresh hours, column mapping, csv/json) |
+| `GET /pricing/suppliers/{id}/items` | Supplier items and costs |
+| `POST /pricing/suppliers/{id}/costs` | Manual cost rows `{rows:[{sku,description,cost}]}` |
+| `POST /pricing/suppliers/{id}/adjust` | `{percent}` applied to all of the supplier's costs |
+| `POST /pricing/suppliers/{id}/import` | `{content}` CSV/JSON text, parsed with the supplier's column map |
+| `POST /pricing/suppliers/{id}/run` | Fetch the feed now (scheduler does this every `refresh_hours`, checked every 5 min) |
+| `GET /pricing/links`, `PUT/DELETE /pricing/links/{thicknessId}`, `GET /pricing/thicknesses?q` | Link a glass/part thickness to a supplier item + factor |
+| `GET /pricing/markups`, `PUT /pricing/markups/{code}`, `POST /pricing/recalculate` | Category markups (null = manual) |
+| `GET /pricing/batches[?status]`, `GET /pricing/batches/{id}`, `POST .../approve`, `POST .../reject` | Review proposed changes (old vs new) |
+
+Each ingest returns `{added, changed, unchanged, batchId, priceChanges}`. A newer pending batch supersedes an older one for the same supplier. Feed fetching is https-only, no redirects, refuses private/loopback addresses (SSRF guard), 10 MB / 30 s limits.
+
+## Database export / import (admin only)
+`GET /api/v1/admin/export[?attachments=false]` streams the whole database as a `.rpb` file (gzip of one JSON row per line, in foreign-key order, ending with a row-count trailer). `POST /api/v1/admin/import?mode=merge|replace&overwrite=true|false&dryRun=true|false` takes that file as the raw request body.
+
+- **merge** adds rows whose ID is not present. With `overwrite=false` existing rows are left alone; with `overwrite=true` they are replaced by the file's version.
+- **replace** deletes every table the file carries (children first), then loads the file. A file exported without attachments is refused if the database has attachments.
+- **dryRun** does everything and rolls back; the response is the per-table report either way (`inserted`, `updated`, `skipped`, `deleted`).
+- All-or-nothing: one transaction; a damaged, truncated or wrong-version file changes nothing. The file's table structure must match the server's (same release, migrations applied).
+- Never exported or overwritten: sessions, password hashes, admin flags, lockout state, supplier feed credentials. Users are only added (without a password), never changed or deleted; a file whose user ids mean different people than on this server is refused.
+- Records are matched by their primary key (the original IDs are preserved by the importer, so a file from this server or from the legacy import lines up).
