@@ -40,7 +40,8 @@ COPY db /opt/reflectopatronus/bundle/db
 COPY scripts /opt/reflectopatronus/bundle/scripts
 COPY docker/postgres/init /opt/reflectopatronus/bundle/docker/postgres/init
 COPY --from=api /api.tar.gz /opt/reflectopatronus/api-dist.tar.gz
-RUN printf '#!/usr/bin/env bash\nrole="${1:-}"; [[ "$role" == db || "$role" == api ]] || { echo "usage: rp-setup db|api   (reads /root/rp.env, certs in /root/pki-in)" >&2; exit 2; }\nexec bash /opt/reflectopatronus/bundle/deploy/lxc/provision-$role.sh\n' > /usr/local/sbin/rp-setup \
- && chmod 0755 /usr/local/sbin/rp-setup \
+RUN install -m 0755 /opt/reflectopatronus/bundle/deploy/lxc/rp-setup.sh /usr/local/sbin/rp-setup \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-firstboot.service /etc/systemd/system/rp-firstboot.service \
+ && systemctl enable rp-firstboot.service \
  && echo "$RP_VERSION" > /opt/reflectopatronus/VERSION && touch /opt/reflectopatronus/.preinstalled \
  && find /opt/reflectopatronus -name '._*' -delete

@@ -111,6 +111,7 @@ cat <<MSG
 
 Container $CTID ($NAME) is up with the bundle in /opt/reflectopatronus/bundle.
 ${MP_ARGS[*]:+Persistent data: ${DATA_MOUNT} -> $DATA_DIR (kept on 'pct destroy' only for bind mounts; volumes are deleted with the container).}
-Next: create /root/rp.env inside it (see docs/DEPLOYMENT.md), then run:
-  pct exec $CTID -- bash /opt/reflectopatronus/bundle/deploy/lxc/provision-$ROLE.sh
+Next, run the interactive setup (it asks for passwords, addresses and certificates, and can generate them):
+  pct enter $CTID    then:  bash /opt/reflectopatronus/bundle/deploy/lxc/rp-setup.sh $ROLE
+(Unattended instead: write /root/rp.env, see docs/DEPLOYMENT.md, and run provision-$ROLE.sh.)
 MSG

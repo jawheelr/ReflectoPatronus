@@ -83,11 +83,15 @@ pct create 211 local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst --hostname rp-a
   --rootfs local-lvm:8 --net0 name=eth0,bridge=vmbr1,ip=10.10.10.11/24,gw=10.10.10.1,firewall=1 --onboot 1
 pct start 210; pct start 211
 ```
-Then continue exactly as in step 3 above (write `rp-db.env` / `rp-api.env`, plus `BOOTSTRAP_ADMIN_PASSWORD=<12+ chars>` in the API one; `pct push` the env files to `/root/rp.env` and the certs to `/root/pki-in/`), but provision with:
-```bash
-pct exec 210 -- rp-setup db
-pct exec 211 -- rp-setup api
-```
+Setup starts by itself the first time a container boots from the template: open its console (`pct console 210`, or the Console tab in the web UI), press Enter at the banner, and the wizard takes over `tty1` and waits for your answers. It reappears at every boot until setup completes, and hands the console back to the login prompt when done. To run it by hand instead, use `pct enter 210` and `rp-setup db` (or `rp-setup api`); to turn the automatic start off, `touch /var/lib/reflectopatronus/skip-firstboot`. It asks for everything that is required, and pressing Enter on a password generates a strong random one:
+
+| Container | Asked |
+|---|---|
+| `db` | database name, admin role + password, application role + password, listen address (defaults to the container's IP), certificates: generate a private CA + server/API client certs, or point at your own directory |
+| `api` | database address, database name, application role + the password set on `db`, first admin user + password, certificates (the `.tgz` the `db` step produced, or your own files) |
+
+Generated passwords are shown once and saved to `/root/rp.env` (mode 0600). The `db` step ends by printing the `pct pull` / `pct push` line that moves `rp-pki-for-api.tgz` to the API container. Answers already in `/root/rp.env` are not asked again, so you can pre-seed the file and run `rp-setup db --yes` / `rp-setup api --yes` for an unattended install; `--no-provision` only collects answers and certificates. Passwords need 12+ characters and none of `; ' " \ $` or spaces. (The older manual route, writing `rp.env` yourself and running `provision-<role>.sh`, still works.)
+
 `deploy/lxc/pct-create.sh --template local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst ...` does the create/push work for you if you have the repo on the host (including the data-mount prompt). With a bind mount, chown the host directory to `100000:100000` first. The template contains no secrets, certs or data. It is amd64 only. **Not yet tested on a real Proxmox host.**
 
 ## Published images (ghcr.io)

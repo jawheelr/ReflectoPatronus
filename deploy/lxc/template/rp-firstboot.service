@@ -1,0 +1,28 @@
+[Unit]
+Description=ReflectoPatronus first-time setup (waits for input on the console)
+Documentation=file:///opt/reflectopatronus/bundle/docs/DEPLOYMENT.md
+ConditionPathExists=!/var/lib/reflectopatronus/configured
+ConditionPathExists=!/var/lib/reflectopatronus/skip-firstboot
+After=network.target systemd-user-sessions.service
+# Take the console from the login prompt while the wizard runs; it is handed back afterwards.
+Conflicts=container-getty@1.service container-getty@2.service getty@tty1.service console-getty.service
+Before=getty.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+Environment=TERM=linux
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+ExecStart=/usr/local/sbin/rp-setup --first-boot
+ExecStopPost=-/bin/systemctl --no-block start container-getty@1.service container-getty@2.service getty@tty1.service
+# Never block boot or hold the console forever on a failed run; the wizard simply starts again at the next boot.
+SuccessExitStatus=0 1 2 130
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target
