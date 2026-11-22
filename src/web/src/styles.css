@@ -37,8 +37,10 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .ico { width: .85rem; height: .85rem; border-radius: 3px; display: inline-block; } .ico.q { background: #3f7fd8; } .ico.p { background: #3aa655; } .ico.c { background: #d98a2b; } .ico.l { background: #c9a227; }
 .workspace { flex: 1; position: relative; overflow: auto; padding: .75rem; }
 .watermark { position: absolute; top: 2rem; left: 3rem; width: 30rem; max-width: 70%; opacity: .35; pointer-events: none; }
-.window { background: var(--panel); border: 1px solid #c9d1dd; border-radius: 6px; box-shadow: 0 2px 10px rgba(20,30,50,.08); max-width: 1100px; }
+.window { background: var(--panel); border: 1px solid #c9d1dd; border-radius: 6px; box-shadow: 0 2px 10px rgba(20,30,50,.08); max-width: 100%; min-width: 22rem; min-height: 9rem; width: 1100px; resize: both; overflow: hidden; display: flex; flex-direction: column; }
 .window[hidden] { display: none; }
+.window > .window-body { flex: 1; overflow: auto; min-height: 0; }
+.window > header { flex: none; cursor: default; }
 .window > header, .modal > header { display: flex; justify-content: space-between; align-items: center; padding: .4rem .7rem; background: var(--surface2); border-bottom: 1px solid var(--line); border-radius: 6px 6px 0 0; font-weight: 600; }
 .x { border: 0; background: none; font-size: 1.2rem; line-height: 1; padding: 0 .35rem; color: var(--muted); } .x:hover { color: #b00020; background: none !important; }
 .window-body { padding: .25rem .75rem .75rem; }
@@ -71,7 +73,7 @@ tr.voided td { color: #8a929c; text-decoration: line-through; }
 .inline { display: inline-flex; gap: .4rem; align-items: center; margin-bottom: .5rem; } .pager { display: flex; gap: .5rem; margin-top: .6rem; }
 
 .backdrop { position: fixed; inset: 0; background: rgba(20,30,50,.35); display: grid; place-items: start center; padding-top: 8vh; z-index: 50; }
-.modal { background: var(--panel); border-radius: 8px; box-shadow: 0 12px 40px rgba(20,30,50,.3); max-width: 96vw; max-height: 84vh; overflow: auto; outline: none; }
+.modal { background: var(--panel); border-radius: 8px; box-shadow: 0 12px 40px rgba(20,30,50,.3); max-width: 96vw; max-height: 92vh; min-width: 18rem; overflow: auto; resize: both; outline: none; }
 .lookup { display: grid; grid-template-columns: 1fr 15rem; gap: 1rem; padding: .75rem 1rem; } .lookup aside fieldset { min-height: 5.5rem; } .lookup-body { padding: .75rem 1rem 1rem; }
 .dialog-buttons { display: flex; gap: .5rem; justify-content: flex-end; padding: 0 1rem 1rem; }
 
