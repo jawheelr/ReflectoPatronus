@@ -30,7 +30,7 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" != tag ]]; then
             if [[ "$GITHUB_REF_NAME" == main ]]; then VER=edge; else VER="0.0.0-${GITHUB_SHA::7}"; fi
           fi
-          bash scripts/build-lxc-template.sh "$VER"
+          GIT_SHA="$GITHUB_SHA" bash scripts/build-lxc-template.sh "$VER"
       - uses: actions/upload-artifact@v4
         with:
           name: lxc-template

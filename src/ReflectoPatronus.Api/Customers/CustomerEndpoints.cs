@@ -28,12 +28,12 @@ public static class CustomerEndpoints
     public static void Map(RouteGroupBuilder api)
     {
         var g = api.MapGroup("/customers");
-        g.MapGet("", Search);
-        g.MapGet("/{id:int}", GetById);
-        g.MapPost("", Create);
-        g.MapPut("/{id:int}", Update);
-        g.MapDelete("/{id:int}", Delete).RequireAdmin();   // deleting is rarer and irreversible: administrators only
-        api.MapGet("/lookups/customer", Lookups);
+        g.MapGet("", Search).RequirePermission("customers.read");
+        g.MapGet("/{id:int}", GetById).RequirePermission("customers.read");
+        g.MapPost("", Create).RequirePermission("customers.write");
+        g.MapPut("/{id:int}", Update).RequirePermission("customers.write");
+        g.MapDelete("/{id:int}", Delete).RequirePermission("customers.delete");   // rarer and irreversible
+        api.MapGet("/lookups/customer", Lookups);   // category/tax lists every form needs
     }
 
     /// <summary>

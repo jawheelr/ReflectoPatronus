@@ -17,7 +17,7 @@ namespace ReflectoPatronus.Api.Admin;
 public static class DatabaseTransfer
 {
     const int FormatVersion = 1;
-    static readonly HashSet<string> NotTransferred = ["schema_migrations", "device_session"];
+    static readonly HashSet<string> NotTransferred = ["schema_migrations", "device_session", "app_group", "group_permission", "user_group", "system_state"];   // access rules belong to the server, not to the data;
     static readonly HashSet<string> KeepAlways = ["app_user", "user_permission"];
     static readonly Dictionary<string, string[]> Strip = new()
     {
@@ -30,7 +30,7 @@ public static class DatabaseTransfer
 
     public static void Map(RouteGroupBuilder api)
     {
-        var g = api.MapGroup("/admin").RequireAdmin();
+        var g = api.MapGroup("/admin").RequirePermission("transfer.manage");
         g.MapGet("/export", Export);
         g.MapPost("/import", Import);
     }

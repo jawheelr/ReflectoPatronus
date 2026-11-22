@@ -15,9 +15,9 @@ public static class TaxEndpoints
     {
         api.MapGet("/tax-codes", ListCodes);
         api.MapGet("/tax-groups", ListGroups);
-        api.MapPost("/tax-groups", CreateGroup).RequireAdmin();
-        api.MapPut("/tax-groups/{code}", UpdateGroup).RequireAdmin();
-        api.MapDelete("/tax-groups/{code}", DeleteGroup).RequireAdmin();
+        api.MapPost("/tax-groups", CreateGroup).RequirePermission("maintenance.write");
+        api.MapPut("/tax-groups/{code}", UpdateGroup).RequirePermission("maintenance.write");
+        api.MapDelete("/tax-groups/{code}", DeleteGroup).RequirePermission("maintenance.write");
     }
 
     static async Task<IResult> ListCodes(NpgsqlDataSource db, CancellationToken ct)

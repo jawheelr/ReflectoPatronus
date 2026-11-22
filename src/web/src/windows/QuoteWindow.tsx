@@ -62,14 +62,14 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
     if (!d) return []
     const t: Tool[] = [{ label: 'Print', icon: 'print', onClick: guard(() => setPrinting(true)), title: 'Preview and print this document' }]
     if (d.voided) return t
-    if (d.type === 'Q') t.push({ label: 'Work Order', icon: 'notes', onClick: guard(() => void convert('W')), disabled: busy, title: 'Create a work order from this quote' })
-    if (d.type === 'Q' || d.type === 'W') t.push({ label: 'Invoice', icon: 'notes', onClick: guard(() => void convert('I')), disabled: busy, title: d.type === 'W' ? 'Turn this work order into an invoice' : 'Create an invoice from this quote' })
-    if (d.type === 'I') t.push({ label: 'Credit', icon: 'notes', onClick: guard(() => { setCreditSeqs(d.lines.filter(l => l.amount !== 0).map(l => l.seq)); setCrediting(true) }), disabled: busy, title: 'Credit all or some lines of this invoice' })
-    if ((d.type === 'I' || d.type === 'W') && d.customerId) t.push({ label: 'Payment', icon: 'save', onClick: guard(() => setPaying(true)), title: 'Receive a payment or deposit for this customer' })
+    if (d.type === 'Q' && api.can(me, 'workorders.write')) t.push({ label: 'Work Order', icon: 'notes', onClick: guard(() => void convert('W')), disabled: busy, title: 'Create a work order from this quote' })
+    if ((d.type === 'Q' || d.type === 'W') && api.can(me, 'invoices.write')) t.push({ label: 'Invoice', icon: 'notes', onClick: guard(() => void convert('I')), disabled: busy, title: d.type === 'W' ? 'Turn this work order into an invoice' : 'Create an invoice from this quote' })
+    if (d.type === 'I' && api.can(me, 'credits.write')) t.push({ label: 'Credit', icon: 'notes', onClick: guard(() => { setCreditSeqs(d.lines.filter(l => l.amount !== 0).map(l => l.seq)); setCrediting(true) }), disabled: busy, title: 'Credit all or some lines of this invoice' })
+    if ((d.type === 'I' || d.type === 'W') && d.customerId && api.can(me, 'payments.write')) t.push({ label: 'Payment', icon: 'save', onClick: guard(() => setPaying(true)), title: 'Receive a payment or deposit for this customer' })
     return t
   }
   const prefs = loadPrefs()
-  const editing = d == null ? docType === 'Q' : d.editable
+  const editing = d == null ? docType === 'Q' && api.can(me, 'quotes.write') : d.editable && api.can(me, ({ Q: 'quotes.write', W: 'workorders.write', I: 'invoices.write' } as Record<string, string>)[d.type] ?? '*')
   const status = d?.statuses.at(-1)?.status
   const t = d?.totals
   return (

@@ -38,9 +38,9 @@ export function Receivables({ initialCustomer }: { initialCustomer?: number }) {
   return (
     <>
       <Toolbar tools={[
-        { label: 'Payment', icon: 'save', onClick: () => setPay(true), disabled: !acct, title: acct ? 'Receive a payment from this customer' : 'Choose a customer first' },
+        { label: 'Payment', icon: 'save', onClick: () => setPay(true), disabled: !acct || !api.can(me, 'payments.write'), title: acct ? 'Receive a payment from this customer' : 'Choose a customer first' },
         { label: 'Statement', icon: 'print', onClick: () => setPrint(true), disabled: !acct, title: 'Print a statement' },
-        { label: 'Apply credit', icon: 'notes', onClick: applyCredit, disabled: !acct || (acct.onAccount <= 0 && !acct.documents.some(d => d.balance < 0)), title: 'Use money held on account, or an over-credited document, against what this customer owes' },
+        { label: 'Apply credit', icon: 'notes', onClick: applyCredit, disabled: !acct || !api.can(me, 'payments.write') || (acct.onAccount <= 0 && !acct.documents.some(d => d.balance < 0)), title: 'Use money held on account, or an over-credited document, against what this customer owes' },
         { label: 'Customer', icon: 'open', onClick: () => setPick(true), title: 'Find any customer' },
         { label: 'Refresh', icon: 'clear', onClick: refresh }]} />
       {error && <p className="formerr">{error}</p>}
@@ -64,7 +64,7 @@ export function Receivables({ initialCustomer }: { initialCustomer?: number }) {
             <h4>Recent payments</h4>
             <table className="grid-table"><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th className="num">Amount</th><th /></tr></thead>
               <tbody>{acct.payments.map(p => <tr key={p.id} className={p.voided ? 'void' : ''}><td>{instant(p.paidAt, me.timeZone)}</td><td>{p.type === 'D' ? 'Deposit' : 'Payment'}{p.category ? ` (${p.category})` : ''}</td><td>{p.description}{p.voided && <span className="badge">VOID</span>}</td><td className="num">{money(p.amount)}</td>
-                <td>{me.isAdmin && !p.voided && <button className="x" title="Void this payment" onClick={() => voidPay(p)}>×</button>}</td></tr>)}
+                <td>{api.can(me, 'payments.void') && !p.voided && <button className="x" title="Void this payment" onClick={() => voidPay(p)}>×</button>}</td></tr>)}
                 {acct.payments.length === 0 && <tr><td colSpan={5} className="muted">No payments yet.</td></tr>}</tbody></table>
           </>}
         </div>

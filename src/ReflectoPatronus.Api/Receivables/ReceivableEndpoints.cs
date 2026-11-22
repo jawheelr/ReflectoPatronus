@@ -23,12 +23,12 @@ public static class ReceivableEndpoints
 {
     public static void Map(RouteGroupBuilder api)
     {
-        api.MapGet("/receivables", Customers);
-        api.MapGet("/customers/{id:int}/account", GetAccount);
-        api.MapGet("/payments", Payments);
-        api.MapPost("/payments", Create);
-        api.MapPost("/payments/{id:int}/void", Void).RequireAdmin();
-        api.MapPost("/customers/{id:int}/apply-credits", ApplyCredits);
+        api.MapGet("/receivables", Customers).RequirePermission("receivables.read");
+        api.MapGet("/customers/{id:int}/account", GetAccount).RequirePermission("receivables.read");
+        api.MapGet("/payments", Payments).RequirePermission("receivables.read");
+        api.MapPost("/payments", Create).RequirePermission("payments.write");
+        api.MapPost("/payments/{id:int}/void", Void).RequirePermission("payments.void");
+        api.MapPost("/customers/{id:int}/apply-credits", ApplyCredits).RequirePermission("payments.write");
     }
 
     static NpgsqlParameter P(object? v, NpgsqlDbType t) => new() { NpgsqlDbType = t, Value = v ?? DBNull.Value };

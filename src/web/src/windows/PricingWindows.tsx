@@ -9,7 +9,7 @@ const int = (s: string) => (s.trim() === '' || !Number.isInteger(Number(s)) ? Na
 
 /** The waste allowance added to each side of a piece of glass before it is priced, per thickness (whole inches + a fraction). */
 export function LossTable() {
-  const { me, toast } = useShell(), admin = me.isAdmin
+  const { me, toast } = useShell(), admin = api.can(me, 'catalog.write')
   type R = { tn: string; td: string; li: string; ln: string; ld: string }
   const [rows, setRows] = useState<R[]>([]); const [dirty, setDirty] = useState(false); const [error, setError] = useState('')
   useEffect(() => { api.getLoss().then(r => setRows(r.map(x => ({ tn: String(x.thickNum), td: String(x.thickDen), li: String(x.lossInt), ln: String(x.lossNum), ld: String(x.lossDen) })))).catch(e => setError(e.message)) }, [])
@@ -40,7 +40,7 @@ let spKey = 1
 
 /** Prices agreed with one customer. A special price beats the catalog price on that customer's quotes. */
 export function SpecialPricing({ initialCustomer }: { initialCustomer?: number }) {
-  const { me, toast } = useShell(), admin = me.isAdmin
+  const { me, toast } = useShell(), admin = api.can(me, 'customers.write')
   const [cid, setCid] = useState<number | null>(initialCustomer ?? null); const [name, setName] = useState('')
   const [rows, setRows] = useState<SP[]>([]); const [dirty, setDirty] = useState(false); const [pick, setPick] = useState(false); const [error, setError] = useState('')
   const [cats, setCats] = useState<api.MaintRow[]>([])

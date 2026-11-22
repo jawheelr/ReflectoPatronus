@@ -56,9 +56,9 @@ public static class MaintenanceEndpoints
         var g = api.MapGroup("/maintenance");
         g.MapGet("", () => Results.Ok(Tables.Select(t => new { t.Key, t.Title, t.Note, KeyColumn = t.KeyCol, t.KeyIdentity, t.Cols, Protected = t.ProtectedDb is not null })));
         g.MapGet("/{table}", List);
-        g.MapPost("/{table}", Create).RequireAdmin();
-        g.MapPut("/{table}/{key}", Update).RequireAdmin();
-        g.MapDelete("/{table}/{key}", Delete).RequireAdmin();
+        g.MapPost("/{table}", Create).RequirePermission("maintenance.write");
+        g.MapPut("/{table}/{key}", Update).RequirePermission("maintenance.write");
+        g.MapDelete("/{table}/{key}", Delete).RequirePermission("maintenance.write");
     }
 
     static IEnumerable<Col> AllCols(TableDef t) => t.KeyIdentity ? t.Cols : t.Cols.Prepend(t.KeyCol);

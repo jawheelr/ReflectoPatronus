@@ -10,7 +10,7 @@ public record PriceRow(string? Category, decimal? Price1, decimal? Price2, decim
 public record ThickRow(short Num, short Den, string? MarkupCategory, IReadOnlyList<PriceRow> Prices);
 public record ItemInput(string? Code, string? Source, string? Description, short? UomId, short? LaborUomId, string? NotePrinted, string? NoteInternal,
     IReadOnlyList<ThickRow>? Thicknesses, DateTime? UpdatedAt);
-public record ItemSummary(int Id, string Code, string? Description, string Source, int Thicknesses);
+public record ItemSummary(int Id, string Code, string? Description, string Source, int Thicknesses, string? Unit, string? ThicknessList, decimal? Price);
 public record ItemDetail(int Id, string Code, string Source, string? Description, short? UomId, short? LaborUomId, string? NotePrinted, string? NoteInternal,
     IReadOnlyList<ThickRow> Thicknesses, DateTime UpdatedAt);
 public record LossRow(short ThickNum, short ThickDen, short LossInt, short LossNum, short LossDen);
@@ -29,9 +29,9 @@ public static class CatalogEndpoints
         var g = api.MapGroup("/catalog");
         g.MapGet("/items", List);
         g.MapGet("/items/{id:int}", Get);
-        g.MapPost("/items", Create).RequireAdmin();
-        g.MapPut("/items/{id:int}", Update).RequireAdmin();
-        g.MapDelete("/items/{id:int}", Delete).RequireAdmin();
+        g.MapPost("/items", Create).RequirePermission("catalog.write");
+        g.MapPut("/items/{id:int}", Update).RequirePermission("catalog.write");
+        g.MapDelete("/items/{id:int}", Delete).RequirePermission("catalog.write");
         g.MapGet("/uoms", async (NpgsqlDataSource db, CancellationToken ct) =>
         {
             await using var c = db.CreateCommand("SELECT id, name, short_name FROM unit_of_measure ORDER BY id");
@@ -40,9 +40,9 @@ public static class CatalogEndpoints
             return Results.Ok(l);
         });
         g.MapGet("/loss", GetLoss);
-        g.MapPut("/loss", PutLoss).RequireAdmin();
-        api.MapGet("/customers/{id:int}/prices", GetSpecial);
-        api.MapPut("/customers/{id:int}/prices", PutSpecial).RequireAdmin();
+        g.MapPut("/loss", PutLoss).RequirePermission("catalog.write");
+        api.MapGet("/customers/{id:int}/prices", GetSpecial).RequirePermission("customers.read");
+        api.MapPut("/customers/{id:int}/prices", PutSpecial).RequirePermission("customers.write");
     }
 
     static NpgsqlParameter P(object? v, NpgsqlDbType t) => new() { NpgsqlDbType = t, Value = v ?? DBNull.Value };
@@ -54,14 +54,18 @@ public static class CatalogEndpoints
     {
         q = N(q); var src = source?.ToUpperInvariant() is "G" or "P" ? source.ToUpperInvariant() : null;
         await using var c = db.CreateCommand("""
-            SELECT p.id, p.code, p.description, p.source, (SELECT count(*) FROM part_thickness WHERE part_id = p.id) FROM part p
+            SELECT p.id, p.code, p.description, p.source, (SELECT count(*) FROM part_thickness WHERE part_id = p.id), u.short_name,
+                   (SELECT string_agg(CASE WHEN thick_den = 0 THEN '-' ELSE thick_num || '/' || thick_den END, ', ' ORDER BY thick_den, thick_num) FROM part_thickness WHERE part_id = p.id),
+                   (SELECT coalesce(nullif(x.price1, 0), nullif(x.price2, 0), nullif(x.price3, 0), nullif(x.price4, 0)) FROM part_price x JOIN part_thickness th ON th.id = x.part_thickness_id
+                    WHERE th.part_id = p.id ORDER BY (x.price_category IS NULL), x.price_category, th.thick_den, th.thick_num LIMIT 1)
+            FROM part p LEFT JOIN unit_of_measure u ON u.id = p.uom_id
             WHERE ($1::text IS NULL OR upper(p.code) LIKE '%' || upper($1) || '%' OR lower(coalesce(p.description, '')) LIKE '%' || lower($1) || '%')
               AND ($2::text IS NULL OR p.source = $2)
             ORDER BY upper(p.code) LIMIT $3
             """);
         c.Parameters.Add(P(q is null ? null : CustomerEndpoints.EscapeLike(q), NpgsqlDbType.Text)); c.Parameters.Add(P(src, NpgsqlDbType.Char)); c.Parameters.AddWithValue(Math.Clamp(limit ?? 300, 1, 1000));
         var l = new List<ItemSummary>(); await using var r = await c.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct)) l.Add(new(r.GetInt32(0), r.GetString(1), CustomerEndpoints.Str(r, 2), r.GetString(3).Trim(), (int)r.GetInt64(4)));
+        while (await r.ReadAsync(ct)) l.Add(new(r.GetInt32(0), r.GetString(1), CustomerEndpoints.Str(r, 2), r.GetString(3).Trim(), (int)r.GetInt64(4), CustomerEndpoints.Str(r, 5), CustomerEndpoints.Str(r, 6), r.IsDBNull(7) ? null : r.GetDecimal(7)));
         return Results.Ok(l);
     }
 

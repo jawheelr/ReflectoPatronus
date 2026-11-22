@@ -22,6 +22,15 @@ builder.Services.AddAuthorization(o => o.FallbackPolicy = new Microsoft.AspNetCo
     .RequireAuthenticatedUser().Build());   // everything requires a signed-in user unless it says AllowAnonymous
 builder.Services.AddOpenApi();
 
+builder.Services.AddHttpClient("updates", c =>
+{
+    c.BaseAddress = new Uri("https://api.github.com/");
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("ReflectoPatronus-update-check");   // generic client name; nothing about the shop or its users is sent
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    c.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddSingleton<ReflectoPatronus.Api.Updates.UpdateService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ReflectoPatronus.Api.Updates.UpdateService>());
 var app = builder.Build();
 
 GatewayGuard.Use(app);   // before everything else: no static file or API response without the gateway when Gateway:Mode=require
@@ -69,6 +78,7 @@ PricingEndpoints.Map(api);
 DatabaseTransfer.Map(api);
 ReflectoPatronus.Api.Admin.TransferJobs.Map(app, api);
 ReflectoPatronus.Api.Admin.AdminEndpoints.Map(api);
+ReflectoPatronus.Api.Updates.UpdateEndpoints.Map(api);
 ReflectoPatronus.Api.Catalog.CatalogEndpoints.Map(api);
 ReflectoPatronus.Api.Reports.ReportEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).

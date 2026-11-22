@@ -63,7 +63,16 @@ The ledger is append-only: a signed amount per row (debit positive, credit negat
 - `GET /catalog/uoms`; `GET/PUT /catalog/loss` (waste allowance per thickness; PUT replaces the table).
 - `GET/PUT /customers/{id}/prices`: special prices (PUT replaces them; administrators).
 
-## Users, company, utilities (administrators unless noted)
+## Roles, groups and permissions
+Access is role-based: a **group** is a set of permissions, a user is in any number of groups and may do whatever any of them allows (`*` = everything, held only by the built-in Administrators group). Permissions are: `customers.read|write|delete`, `documents.read`, `quotes.write`, `workorders.write`, `invoices.write`, `credits.write`, `documents.void`, `receivables.read`, `payments.write`, `payments.void`, `catalog.write`, `maintenance.write`, `pricing.manage`, `reports.view`, `company.write`, `users.manage`, `transfer.manage`, `utilities.cleanup`. Reference data (tax, categories, price lists, lookups, parts pickers, company details) is readable by every signed-in user. A refused call is `403 {error, needs:[...]}`; changes to a user's groups or a group's permissions apply on the next request.
+- `GET /me` includes `permissions` and `groups`. `GET /permissions` (catalog), `GET/POST /groups`, `PUT/DELETE /groups/{id}` (`users.manage`). The Administrators group cannot be changed or deleted, built-in groups cannot be deleted, and a group with members cannot be deleted.
+- Users: `POST /users {code, name, password, groupIds[], active}` (at least one group), `PUT /users/{id} {name, active, groupIds[]}`. You cannot remove your own Administrators membership or deactivate yourself, and one active administrator who can sign in must always remain. `app_user.is_admin` is kept as a derived flag.
+- Per type checks happen inside the handler: editing a document needs that type's write permission, converting needs the target type's (`W` workorders, `I` invoices, `C` credits).
+
+## Updates
+`GET /updates` (current commit, newest commit on the tracked branch, whether you are behind, how to update), `POST /updates/check`, `POST /updates/dismiss` (`users.manage`). A background service checks GitHub once a week (`Updates__IntervalDays`, `Updates__Repository`, `Updates__Branch`, `Updates__Enabled=false` to disable); only the repository name is sent, with a generic user agent. The running commit comes from `RP_BUILD_SHA` (Docker `GIT_SHA` build arg) or `/opt/reflectopatronus/COMMIT` (LXC).
+
+## Users, company, utilities
 - `POST /me/password` `{current, new}` (any user; 12+ characters; signs out other devices).
 - `GET/POST /users`, `PUT /users/{id}` `{name, active, isAdmin}`, `POST /users/{id}/password`. You cannot demote or deactivate yourself and one active administrator must remain.
 - `PUT /company`. `POST /utilities/delete-quotes` and `/utilities/delete-inactive-customers` with `{before, dryRun}`.
@@ -76,7 +85,9 @@ The ledger is append-only: a signed amount per row (debit positive, credit negat
 `GET /admin/transfer/files`, `PUT /admin/transfer/files/{name}` (stream an upload), `DELETE`, `POST /admin/transfer/export {attachments}` and `POST /admin/transfer/import {file, mode, overwrite, dryRun}` start background jobs (202 + id), `GET /admin/transfer/jobs/{id}` reports progress. `POST /admin/transfer/ticket {file?, attachments}` returns a short-lived URL the browser can download natively (stored files support Range requests). The older `GET /admin/export` and `POST /admin/import` stream through the request and remain for scripts.
 
 ## Testing
-`scripts/smoke-admin.sh` (74 checks) covers the catalog, special pricing, loss table, users and passwords, company, credits and every report; it removes what it creates.
+`scripts/smoke-roles.py` (86 checks) runs every built-in group against a matrix of 35 gated endpoints plus real flows (a Sales user cannot invoice, a Counter user cannot void, custom groups, live permission changes, last-administrator rules).
+
+`scripts/smoke-admin.sh` (80 checks) covers the catalog, special pricing, loss table, users and passwords, company, credits and every report; it removes what it creates.
 
 `scripts/smoke-workflow.sh` (40 checks) walks quote -> work order -> invoice -> payments -> credit memo -> voids against a running stack and removes everything it creates.
 

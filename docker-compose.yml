@@ -4,6 +4,8 @@ services:
   api:
     build:
       context: ./src/ReflectoPatronus.Api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}   # set by scripts/setup.sh and scripts/update.sh; lets the console tell when a newer commit exists
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080

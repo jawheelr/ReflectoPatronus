@@ -70,6 +70,7 @@ POSTGRES_USER="$POSTGRES_USER" "$ROOT/scripts/generate-dev-certs.sh" >/dev/null
 echo "Certificates are in $ROOT/certs (development CA; use your own CA for production)."
 $START || { echo "--no-start: done. Start with: docker compose --env-file .env up -d --build"; exit 0; }
 
+export GIT_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"   # lets the console tell when a newer commit exists
 DC=(docker compose --env-file "$ENVF"); $GHCR && DC=(docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file "$ENVF")
 $GHCR && "${DC[@]}" pull || "${DC[@]}" build
 "${DC[@]}" up -d db

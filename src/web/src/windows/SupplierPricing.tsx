@@ -15,7 +15,7 @@ export function SupplierPricing() {
   const [pending, setPending] = useState(0)
   const refreshPending = useCallback(() => { api.getBatches('pending').then(b => setPending(b.length)).catch(() => {}) }, [])
   useEffect(refreshPending, [refreshPending, tab])
-  if (!me.isAdmin) return <div className="form"><p>Administrator access is required.</p></div>
+  if (!api.can(me, 'pricing.manage')) return <div className="form"><p>You do not have permission to change supplier pricing.</p></div>
   return (
     <div className="form">
       <p className="muted">Supplier costs flow into selling prices as <strong>cost × factor × (1 + category markup)</strong>. Changes are proposed for your review; nothing goes live until you approve it, and existing documents never change.</p>

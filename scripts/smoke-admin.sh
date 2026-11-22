@@ -71,9 +71,10 @@ check "bad loss row refused" 400 "$(code PUT /catalog/loss -d '[{"thickNum":1,"t
 check "duplicate loss rows refused" 400 "$(code PUT /catalog/loss -d '[{"thickNum":1,"thickDen":4,"lossInt":1,"lossNum":0,"lossDen":1},{"thickNum":1,"thickDen":4,"lossInt":2,"lossNum":0,"lossDen":1}]')"
 
 echo "users and passwords"
-NU="$(api POST /users -d "$(printf '{"code":"%s","name":"Smoke User","password":"correct horse battery","isAdmin":false,"active":true}' "$UCODE")")"; UID_="$(echo "$NU" | J "d['id']")"
-check "short password refused" 400 "$(code POST /users -d '{"code":"zzushort","password":"short","isAdmin":false,"active":true}')"
-check "duplicate user refused" 409 "$(code POST /users -d "$(printf '{"code":"%s","password":"correct horse battery","isAdmin":false,"active":true}' "$UCODE")")"
+GRP="$(api GET /groups | J "[g['id'] for g in d if g['code']=='counter'][0]")"; ADMGRP="$(api GET /groups | J "[g['id'] for g in d if g['code']=='administrators'][0]")"
+NU="$(api POST /users -d "$(printf '{"code":"%s","name":"Smoke User","password":"correct horse battery","groupIds":[%s],"active":true}' "$UCODE" "$GRP")")"; UID_="$(echo "$NU" | J "d['id']")"
+check "short password refused" 400 "$(code POST /users -d "$(printf '{"code":"zzushort","password":"short","groupIds":[%s],"active":true}' "$GRP")")"
+check "duplicate user refused" 409 "$(code POST /users -d "$(printf '{"code":"%s","password":"correct horse battery","groupIds":[%s],"active":true}' "$UCODE" "$GRP")")"
 UT="$(curl -s -X POST "$URL/auth/login" -H 'content-type: application/json' -d "$(printf '{"userCode":"%s","password":"correct horse battery","deviceName":"u","platform":"desktop"}' "$UCODE")" | J "d['accessToken']")"
 UH=(-H "Authorization: Bearer $UT" -H 'content-type: application/json')
 check "new user signs in" 200 "$(curl -s -o /dev/null -w '%{http_code}' "${UH[@]}" "$URL/me")"
@@ -84,10 +85,10 @@ check "change own password" 204 "$(curl -s -o /dev/null -w '%{http_code}' -X POS
 check "old password no longer works" 401 "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/auth/login" -H 'content-type: application/json' -d "$(printf '{"userCode":"%s","password":"correct horse battery","deviceName":"u","platform":"desktop"}' "$UCODE")")"
 check "admin resets the password" 204 "$(code POST "/users/$UID_/password" -d '{"password":"reset by the admin ok"}')"
 check "token is revoked by the reset" 401 "$(curl -s -o /dev/null -w '%{http_code}' "${UH[@]}" "$URL/me")"
-check "deactivate user" 204 "$(code PUT "/users/$UID_" -d '{"name":"Smoke User","active":false,"isAdmin":false}')"
+check "deactivate user" 204 "$(code PUT "/users/$UID_" -d "$(printf '{"name":"Smoke User","active":false,"groupIds":[%s]}' "$GRP")")"
 check "inactive user cannot sign in" 401 "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/auth/login" -H 'content-type: application/json' -d "$(printf '{"userCode":"%s","password":"reset by the admin ok","deviceName":"u","platform":"desktop"}' "$UCODE")")"
 ME="$(api GET /me | J "d['id']")"
-check "cannot demote yourself" 409 "$(code PUT "/users/$ME" -d '{"name":"x","active":true,"isAdmin":false}')"
+check "cannot remove your own Administrators membership" 409 "$(code PUT "/users/$ME" -d "$(printf '{"name":"x","active":true,"groupIds":[%s]}' "$GRP")")"
 
 echo "company"
 CO="$(api GET /company)"
@@ -121,5 +122,16 @@ echo "clean-up tools (counts only)"
 check "count old quotes" 200 "$(code POST /utilities/delete-quotes -d '{"before":"1990-01-01","dryRun":true}')"
 check "quote count needs a date" 400 "$(code POST /utilities/delete-quotes -d '{"dryRun":true}')"
 check "count inactive customers" 200 "$(code POST /utilities/delete-inactive-customers -d '{"dryRun":true}')"
+
+echo "updates"
+UP="$(api GET /updates)"
+check "update status readable" 200 "$(code GET /updates)"
+check "mode is reported" 1 "$(echo "$UP" | J "1 if d['mode'] in ('docker','lxc','other') else 0")"
+check "tracks main of this repository" main "$(echo "$UP" | J "d['branch']")"
+UC="$(api POST /updates/check)"
+check "manual check reaches GitHub (or reports why not)" 1 "$(echo "$UC" | J "1 if (d['latest'] or d['error']) else 0")"
+check "a check is remembered" 1 "$(api GET /updates | J "1 if d['checkedAt'] else 0")"
+check "dismiss is accepted" 204 "$(code POST /updates/dismiss)"
+sql "DELETE FROM system_state WHERE key = 'update.dismissed'" >/dev/null
 
 echo; echo "passed $pass, failed $fail"; [[ $fail -eq 0 ]]

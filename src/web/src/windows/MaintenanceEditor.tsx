@@ -25,7 +25,7 @@ export function MaintenanceEditor({ table }: { table: string }) {
   const [filter, setFilter] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const admin = shell.me.isAdmin
+  const admin = api.can(shell.me, 'maintenance.write')
 
   const editable = useMemo(() => def ? (def.keyIdentity ? def.cols : [def.keyColumn, ...def.cols]) : [], [def])
   const blank = useCallback((d: api.MaintTable): Form => Object.fromEntries([d.keyColumn, ...d.cols].map(c => [c.api, kindOf(c) === 'bool' ? false : ''])), [])
@@ -75,16 +75,16 @@ export function MaintenanceEditor({ table }: { table: string }) {
   })
 
   if (!def) return <p className="muted">{error || 'Loading…'}</p>
-  const shownCols = [def.keyColumn, ...def.cols].filter(c => kindOf(c) !== 'bool').slice(0, 3)
+  const shownCols = [def.keyColumn, ...def.cols].slice(0, 8)
   const shown = rows.filter(r => !filter || Object.values(r).some(v => String(v ?? '').toLowerCase().includes(filter.toLowerCase())))
   const protectedRow = def.protected && sel != null && rows.find(r => keyOf(r) === sel)?.isSystem === true
   return (
     <>
       <Toolbar tools={[
-        { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty || !admin, title: !admin ? 'Only administrators can change these' : dirty ? 'Save (Ctrl+S)' : 'No changes to save' },
+        { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty || !admin, title: !admin ? 'You do not have permission to change these' : dirty ? 'Save (Ctrl+S)' : 'No changes to save' },
         { label: 'Delete', icon: 'delete', onClick: remove, disabled: busy || sel == null || !admin || protectedRow, title: protectedRow ? 'System entries cannot be deleted' : 'Delete this entry' },
-        { label: 'New', icon: 'clear', onClick: startNew, disabled: !admin, title: admin ? 'Add an entry' : 'Only administrators can change these' }]} />
-      {!admin && <p className="muted">You can look at these entries; only an administrator can change them.</p>}
+        { label: 'New', icon: 'clear', onClick: startNew, disabled: !admin, title: admin ? 'Add an entry' : 'You do not have permission to change these' }]} />
+      {!admin && <p className="muted">You can look at these entries; you need permission to change them.</p>}
       {def.note && <p className="muted">{def.note}</p>}
       {error && <p className="formerr">{error}</p>}
       <div className="maint">
@@ -92,7 +92,7 @@ export function MaintenanceEditor({ table }: { table: string }) {
           <input className="search" placeholder="Find" value={filter} onChange={e => setFilter(e.target.value)} aria-label="Find" />
           <div className="maint-list">
             <table className="grid-table selectable"><thead><tr>{shownCols.map(c => <th key={c.api}>{c.label}</th>)}</tr></thead>
-              <tbody>{shown.map(r => <tr key={keyOf(r)} className={keyOf(r) === sel ? 'sel' : ''} onClick={() => choose(r)}>{shownCols.map(c => <td key={c.api}>{String(r[c.api] ?? '')}</td>)}</tr>)}
+              <tbody>{shown.map(r => <tr key={keyOf(r)} className={keyOf(r) === sel ? 'sel' : ''} onClick={() => choose(r)}>{shownCols.map(c => <td key={c.api} className={kindOf(c) === 'decimal' ? 'num' : ''}>{kindOf(c) === 'bool' ? (r[c.api] ? '✓' : '') : String(r[c.api] ?? '')}</td>)}</tr>)}
                 {shown.length === 0 && <tr><td colSpan={shownCols.length} className="muted">Nothing found.</td></tr>}</tbody></table>
           </div>
         </div>

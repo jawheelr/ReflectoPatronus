@@ -1,4 +1,5 @@
 using Npgsql;
+using ReflectoPatronus.Api.Auth;
 using ReflectoPatronus.Api.Customers;
 
 namespace ReflectoPatronus.Api.Documents;
@@ -29,8 +30,8 @@ public static class DocumentEndpoints
     public static void Map(RouteGroupBuilder api)
     {
         var g = api.MapGroup("/documents");
-        g.MapGet("", List);
-        g.MapGet("/{id:int}", GetById);
+        g.MapGet("", List).RequirePermission("documents.read");
+        g.MapGet("/{id:int}", GetById).RequirePermission("documents.read");
         DocumentEdit.Map(api, g);
         DocumentWorkflow.Map(g);
     }

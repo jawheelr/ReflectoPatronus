@@ -20,7 +20,7 @@ public static class PricingEndpoints
 
     public static void Map(RouteGroupBuilder api)
     {
-        var g = api.MapGroup("/pricing").RequireAdmin();
+        var g = api.MapGroup("/pricing").RequirePermission("pricing.manage");
 
         g.MapGet("/suppliers", ListSuppliers);
         g.MapPost("/suppliers", (SupplierInput i, NpgsqlDataSource db, CancellationToken ct) => SaveSupplier(null, i, db, ct));

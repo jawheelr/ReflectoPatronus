@@ -13,15 +13,16 @@ import { Receivables } from '../windows/Receivables'
 import { PrinterSetup } from '../windows/PrinterSetup'
 import { CatalogEditor } from '../windows/CatalogEditor'
 import { LossTable, SpecialPricing } from '../windows/PricingWindows'
-import { ChangePassword, Cleanup, CompanyInfo, Users } from '../windows/AdminWindows'
+import { ChangePassword, Cleanup, CompanyInfo, Groups, Users } from '../windows/AdminWindows'
 import { REPORT_MENU, ReportWindow } from '../windows/ReportWindow'
 import { CommandPalette } from './CommandPalette'
+import { UpdateBanner, UpdateDialog, useUpdates } from './UpdateBanner'
 import { Modal } from './ui'
 import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', cleanup: 'Delete Options', report: 'Report' }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
 const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
 const sep = (): MenuItem => ({ label: '', sep: true })
@@ -49,6 +50,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   const [active, setActive] = useState<string | null>(saved.active)
   const [menu, setMenu] = useState<string | null>(null)
   const [about, setAbout] = useState(false)
+  const upd = useUpdates(me); const [updOpen, setUpdOpen] = useState(false)
   type Theme = 'system' | 'light' | 'dark'
   const [theme, setThemeState] = useState<Theme>(() => (localStorage.getItem('rp.theme') as Theme) || 'system')
   const setTheme = (t: Theme) => {
@@ -95,22 +97,23 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
     { label: (theme === 'dark' ? '✓ ' : '') + 'Dark', action: () => setTheme('dark') },
     { label: (theme === 'system' ? '✓ ' : '') + 'Match system', action: () => setTheme('system') },
   ]
-  const admin = (items: MenuItem[]) => (me.isAdmin ? items : [])
+  const can = (...p: string[]) => api.can(me, ...p)
+  const when = (ok: boolean, items: MenuItem[]) => (ok ? items : [])
   const menus: Record<string, MenuItem[]> = {
     File: [{ label: 'Log Out', action: signOut }, { label: 'Close Window', action: () => active && close(active), disabled: !active },
-      { label: 'Printer Setup…', kind: 'printers' }, { label: 'Change Password', kind: 'password' }, { label: 'User Profiles', kind: 'users', disabled: !me.isAdmin }, { label: 'Appearance', children: themeItems }],
-    Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, { label: 'Payment / Receivables', kind: 'receivables' }, { label: 'Documents', kind: 'documents' }],
+      { label: 'Printer Setup…', kind: 'printers' }, { label: 'Change Password', kind: 'password' }, { label: 'User Profiles', kind: 'users', disabled: !can('users.manage') }, { label: 'Groups (roles)', kind: 'groups', disabled: !can('users.manage') }, { label: 'Appearance', children: themeItems }],
+    Daily: [{ label: 'Flat Glass Quote', kind: 'quote', disabled: !can('quotes.write', 'documents.read') }, { label: 'Payment / Receivables', kind: 'receivables', disabled: !can('receivables.read') }, { label: 'Documents', kind: 'documents', disabled: !can('documents.read') }],
     Maintenance: [
-      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, { label: 'Customer Special Pricing', kind: 'special' }, ...soon('Vendor Entry')] },
+      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer', disabled: !can('customers.read') }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, { label: 'Customer Special Pricing', kind: 'special', disabled: !can('customers.read') }, ...soon('Vendor Entry')] },
       { label: 'Miscellaneous', children: [{ label: 'Price Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('price-categories') }, { label: 'Lossage Table', kind: 'loss' }, ...soon('Markup Categories', 'Special Cuts Markup'), sep(), { label: 'Salesman/Installer', kind: 'maint', arg: MAINT_TABLES.indexOf('staff') }, ...soon('Advertising Codes'), { label: 'Payment Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('pay-categories') }, { label: 'Status Table', kind: 'maint', arg: MAINT_TABLES.indexOf('statuses') }] },
       { label: 'Parts', children: [{ label: 'Flat Glass Types', kind: 'catalog', arg: 0 }, ...soon('Fabrications'), { label: 'Flat Glass Parts', kind: 'catalog', arg: 1 }, sep(), ...soon('Part Categories', 'Lookup Categories', 'Add-on Parts', 'GL Accts')] },
       { label: 'Taxes', children: [{ label: 'Tax Codes Entry', kind: 'maint', arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Tax Groups Entry', kind: 'taxgroups' }] },
     ],
     Utilities: [
-      { label: 'Company Information', kind: 'company' }, ...soon('Enterprise Information'), { label: 'Reprint Document', kind: 'documents' },
-      { label: 'Delete Options', children: [{ label: 'Delete (void) Payments', kind: 'receivables' }, { label: 'Delete (void) Deposits', kind: 'receivables' }, { label: 'Delete Inactive Customers', kind: 'cleanup', disabled: !me.isAdmin }, { label: 'Delete Quotes', kind: 'cleanup', disabled: !me.isAdmin }, { label: 'Void Invoice', kind: 'documents' }, { label: 'Void Work Order', kind: 'documents' }, { label: 'Void Credit Invoice', kind: 'documents' }, ...soon('Remove Finance Charges')] },
-      { label: 'Invoice File', children: [{ label: 'Apply Credits', kind: 'receivables' }, { label: 'Edit Flat Glass Invoice', kind: 'documents' }] },
-      ...admin([{ label: 'Perform Cost Increase / Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }]),
+      { label: 'Company Information', kind: 'company', disabled: !can('company.write') }, ...soon('Enterprise Information'), { label: 'Reprint Document', kind: 'documents', disabled: !can('documents.read') },
+      { label: 'Delete Options', children: [{ label: 'Delete (void) Payments', kind: 'receivables', disabled: !can('payments.void') }, { label: 'Delete (void) Deposits', kind: 'receivables', disabled: !can('payments.void') }, { label: 'Delete Inactive Customers', kind: 'cleanup', disabled: !can('utilities.cleanup') }, { label: 'Delete Quotes', kind: 'cleanup', disabled: !can('utilities.cleanup') }, { label: 'Void Invoice', kind: 'documents', disabled: !can('documents.void') }, { label: 'Void Work Order', kind: 'documents', disabled: !can('documents.void') }, { label: 'Void Credit Invoice', kind: 'documents', disabled: !can('documents.void') }, ...soon('Remove Finance Charges')] },
+      { label: 'Invoice File', children: [{ label: 'Apply Credits', kind: 'receivables', disabled: !can('payments.write') }, { label: 'Edit Flat Glass Invoice', kind: 'documents', disabled: !can('invoices.write') }] },
+      ...when(can('pricing.manage'), [{ label: 'Perform Cost Increase / Supplier Pricing', kind: 'pricing' as Kind }]), ...when(can('transfer.manage'), [{ label: 'Import / Export Database', kind: 'transfer' as Kind }]),
       sep(), { label: 'Settings (time zone, devices)', kind: 'settings' },
     ],
     Reports: [
@@ -122,8 +125,10 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
         ...rep('List Price Categories'), ...soon('List Markup Categories', 'List Advertising Codes'), sep(), ...rep('List Flat Glass Types'), ...soon('List Fabrications'), ...rep('List Flat Glass Parts'), sep(), ...rep('List Users', 'List Companies')] },
       ...soon('Ordering'),
     ],
-    Help: [{ label: 'Knowledge Base', kind: 'help' }, { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
+    Help: [{ label: 'Knowledge Base', kind: 'help' }, { label: 'Check for Updates…', action: () => setUpdOpen(true), disabled: !can('users.manage') }, { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
   }
+  const lock = (items: MenuItem[]): MenuItem[] => items.map(i => ({ ...i, disabled: true, children: i.children ? lock(i.children) : undefined }))
+  if (!can('reports.view')) menus.Reports = lock(menus.Reports)
   const run = (i: MenuItem) => { if (i.disabled || i.children) return; setMenu(null); if (i.kind) open(i.kind, i.arg); i.action?.() }
   const commands = [{ label: 'Flat Glass Quote', kind: 'quote' as Kind }, { label: 'Customer Entry', kind: 'customer' as Kind }, { label: 'Payments / Receivables', kind: 'receivables' as Kind }, { label: 'Printer Setup', kind: 'printers' as Kind }, { label: 'Documents', kind: 'documents' as Kind },
     { label: 'Tax Code Entry', kind: 'maint' as Kind, arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Knowledge Base (how to use)', kind: 'help' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : [])]
@@ -142,14 +147,15 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
           <button className="themebtn" onClick={() => setTheme(isDark ? 'light' : 'dark')} aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'} title={isDark ? 'Light theme' : 'Dark theme'}>{isDark ? '☀' : '☾'}</button>
           <button className="searchbtn" onClick={() => setPalette(true)} aria-label="Search"><span>Search…</span><kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd></button>
         </nav>
+        <UpdateBanner s={upd.s} onDetails={() => setUpdOpen(true)} onDismiss={() => api.dismissUpdate().then(upd.reload)} />
         <div className="body">
           <aside className="side">
             <section>
               <h3 onClick={() => setCollapsed(c => ({ ...c, q: !c.q }))}>Quick Launch <span>{collapsed.q ? '⌄' : '⌃'}</span></h3>
               {!collapsed.q && <ul>
-                <li><button onClick={() => open('quote')} title="Flat Glass Quote"><i className="ico q" /><span>Flat Glass Quote</span></button></li>
-                <li><button onClick={() => open('receivables')} title="Payments and receivables"><i className="ico p" /><span>Payment</span></button></li>
-                <li><button onClick={() => open('customer')} title="Customers"><i className="ico c" /><span>Customers</span></button></li>
+                <li><button onClick={() => open('quote')} disabled={!can('quotes.write', 'documents.read')} title="Flat Glass Quote"><i className="ico q" /><span>Flat Glass Quote</span></button></li>
+                <li><button onClick={() => open('receivables')} disabled={!can('receivables.read')} title="Payments and receivables"><i className="ico p" /><span>Payment</span></button></li>
+                <li><button onClick={() => open('customer')} disabled={!can('customers.read')} title="Customers"><i className="ico c" /><span>Customers</span></button></li>
                 <li><button onClick={signOut} title="Log Out"><i className="ico l" /><span>Log Out</span></button></li>
               </ul>}
             </section>
@@ -187,6 +193,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'company' && <CompanyInfo />}
                     {w.kind === 'password' && <ChangePassword />}
                     {w.kind === 'users' && <Users />}
+                    {w.kind === 'groups' && <Groups />}
                     {w.kind === 'cleanup' && <Cleanup />}
                     {w.kind === 'report' && <ReportWindow index={w.arg ?? 0} />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}
@@ -197,6 +204,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
           </main>
         </div>
         <footer className="statusbar"><span>{me.code}</span><span>{me.timeZone}</span><span className="spacer" /><span>Ver. 0.1.0</span></footer>
+        {updOpen && <UpdateDialog me={me} s={upd.s} setS={upd.setS} onClose={() => setUpdOpen(false)} />}
         {palette && <CommandPalette commands={commands} open={open} onClose={() => setPalette(false)} />}
         {about && <Modal title="About" onClose={() => setAbout(false)} width={420}><div className="lookup-body"><p><strong>ReflectoPatronus</strong> 0.1.0</p><p>A modern glass shop software, replacing the legacy system and running on PostgreSQL.</p><p>Developer: Jarred Wheeler</p><p className="muted">Documents, quotes and payments are read-only for now; customers and the maintenance tables are editable.</p></div></Modal>}
         <div className="toasts" role="status" aria-live="polite">{toasts.map(t => <div key={t.id} className={'toast ' + t.kind}>{t.message}</div>)}</div>

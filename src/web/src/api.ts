@@ -2,7 +2,9 @@
 // closes). Both are opaque, revocable per device. A 401 triggers one refresh-and-retry.
 export interface UserInfo { id: number; code: string; name: string | null; timeZone: string }
 interface TokenResponse { accessToken: string; refreshToken: string; expiresInSeconds: number; user: UserInfo }
-export interface Me { id: number; code: string; name: string | null; timeZone: string; userTimeZone: string | null; companyTimeZone: string; isAdmin: boolean }
+export interface Me { id: number; code: string; name: string | null; timeZone: string; userTimeZone: string | null; companyTimeZone: string; isAdmin: boolean; permissions: string[]; groups: string[] }
+/** True when the signed-in user may do ANY of the permissions ('*' = Administrators, may do everything). */
+export const can = (me: Me, ...perms: string[]) => me.permissions.includes('*') || perms.some(p => me.permissions.includes(p))
 export interface SessionInfo { id: string; deviceName: string; platform: string; createdAt: string; lastSeenAt: string; current: boolean }
 export interface CustomerSummary { id: number; number: string; lastName: string; firstName: string | null; city: string | null; state: string | null; phone: string | null; balance: number }
 export interface CustomerPhone { slot: number; number: string; ext: string | null }
@@ -249,7 +251,7 @@ export const getCompany = () => call<CompanyInfo>('/company')
 // Parts and pricing catalog
 export interface PriceRow { category: string | null; price1: number | null; price2: number | null; price3: number | null; price4: number | null; minPrice: number | null; laborPrice: number | null; minLabor: number | null; taxable: boolean }
 export interface ThickRow { num: number; den: number; markupCategory: string | null; prices: PriceRow[] }
-export interface ItemSummary { id: number; code: string; description: string | null; source: string; thicknesses: number }
+export interface ItemSummary { id: number; code: string; description: string | null; source: string; thicknesses: number; unit: string | null; thicknessList: string | null; price: number | null }
 export interface ItemInput { code: string; source: string; description: string | null; uomId: number | null; laborUomId: number | null; notePrinted: string | null; noteInternal: string | null; thicknesses: ThickRow[]; updatedAt: string | null }
 export interface ItemDetail extends ItemInput { id: number; updatedAt: string }
 export const getItems = (q: string, source: 'G' | 'P') => call<ItemSummary[]>(`/catalog/items?${new URLSearchParams({ q, source })}`)
@@ -267,10 +269,10 @@ export const putSpecialPrices = (customerId: number, rows: Omit<SpecialPrice, 'p
 
 // Company, users, utilities
 export const putCompany = (c: CompanyInfo & { timeZone?: string | null }) => call<void>('/company', { method: 'PUT', body: JSON.stringify(c) })
-export interface UserRow { id: number; code: string; name: string | null; active: boolean; isAdmin: boolean; hasPassword: boolean; lockedUntil: string | null; sessions: number }
+export interface UserRow { id: number; code: string; name: string | null; active: boolean; isAdmin: boolean; hasPassword: boolean; lockedUntil: string | null; sessions: number; groupIds: number[] }
 export const getUsers = () => call<UserRow[]>('/users')
-export const createUser = (u: { code: string; name: string; password: string; isAdmin: boolean }) => call<{ id: number }>('/users', { method: 'POST', body: JSON.stringify({ ...u, active: true }) })
-export const updateUser = (id: number, u: { name: string | null; active: boolean; isAdmin: boolean }) => call<void>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(u) })
+export const createUser = (u: { code: string; name: string; password: string; groupIds: number[] }) => call<{ id: number }>('/users', { method: 'POST', body: JSON.stringify({ ...u, active: true }) })
+export const updateUser = (id: number, u: { name: string | null; active: boolean; groupIds: number[] }) => call<void>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(u) })
 export const resetUserPassword = (id: number, password: string) => call<void>(`/users/${id}/password`, { method: 'POST', body: JSON.stringify({ password }) })
 export const changeOwnPassword = (current: string, next: string) => call<void>('/me/password', { method: 'POST', body: JSON.stringify({ current, new: next }) })
 export const cleanup = (what: 'delete-quotes' | 'delete-inactive-customers', before: string | null, dryRun: boolean) =>
@@ -287,3 +289,19 @@ export const runReport = (id: string, p: { from?: string; to?: string; asOf?: st
   if (p.customerId) q.set('customerId', String(p.customerId)); if (p.type) q.set('type', p.type)
   return call<ReportResult>(`/reports/${id}?${q}`)
 }
+
+// Groups (roles) and permissions
+export interface PermissionDef { key: string; area: string; label: string }
+export interface GroupRow { id: number; code: string; name: string; description: string | null; isSystem: boolean; locked: boolean; permissions: string[]; members: number }
+export const getPermissions = () => call<PermissionDef[]>('/permissions')
+export const getGroups = () => call<GroupRow[]>('/groups')
+export const createGroup = (g: { name: string; description: string | null; permissions: string[] }) => call<{ id: number }>('/groups', { method: 'POST', body: JSON.stringify(g) })
+export const updateGroup = (id: number, g: { name: string; description: string | null; permissions: string[] }) => call<void>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(g) })
+export const deleteGroup = (id: number) => call<void>(`/groups/${id}`, { method: 'DELETE' })
+
+// Updates (administrators)
+export interface UpdateStatus { mode: 'docker' | 'lxc' | 'other'; current: string | null; currentShort: string | null; latest: string | null; latestShort: string | null; latestMessage: string | null; latestDate: string | null; latestUrl: string | null
+  available: boolean; canCompare: boolean; commitsBehind: number | null; checkedAt: string | null; error: string | null; dismissed: boolean; enabled: boolean; repository: string; branch: string; commands: string[] }
+export const getUpdateStatus = () => call<UpdateStatus>('/updates')
+export const checkForUpdates = () => call<UpdateStatus>('/updates/check', { method: 'POST' })
+export const dismissUpdate = () => call<void>('/updates/dismiss', { method: 'POST' })

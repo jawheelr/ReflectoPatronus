@@ -22,11 +22,11 @@ public static class DocumentEdit
 {
     public static void Map(RouteGroupBuilder api, RouteGroupBuilder docs)
     {
-        docs.MapPost("/calculate", Calculate);
-        docs.MapPost("", Create);
-        docs.MapPut("/{id:int}", Update);
-        docs.MapPost("/{id:int}/void", Void);
-        api.MapGet("/catalog/parts", Parts);
+        docs.MapPost("/calculate", Calculate).RequirePermission("quotes.write", "workorders.write", "invoices.write");
+        docs.MapPost("", Create).RequirePermission("quotes.write");
+        docs.MapPut("/{id:int}", Update);   // the permission depends on the document type: checked inside
+        docs.MapPost("/{id:int}/void", Void).RequirePermission("documents.void");
+        api.MapGet("/catalog/parts", Parts);   // pickers: open to anyone signed in
     }
 
     static string? N(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -207,7 +207,7 @@ public static class DocumentEdit
         return v is DateOnly d ? d : DateOnly.FromDateTime((DateTime)v!);
     }
 
-    static async Task<IResult> Update(int id, DocumentInput input, ClaimsPrincipal user, NpgsqlDataSource db, CancellationToken ct)
+    static async Task<IResult> Update(int id, DocumentInput input, ClaimsPrincipal user, HttpContext http, NpgsqlDataSource db, CancellationToken ct)
     {
         if (Validate(input) is { } err) return Results.BadRequest(new { error = err });
         if (input.UpdatedAt is null) return Results.BadRequest(new { error = "updatedAt (from the document you loaded) is required." });
@@ -228,6 +228,7 @@ public static class DocumentEdit
                 if (!await r.ReadAsync(ct)) return Results.NotFound();
                 type = r.GetString(0).Trim(); voided = r.GetBoolean(1); updated = r.GetDateTime(2); oldCustomer = r.IsDBNull(3) ? null : r.GetInt32(3); oldTotal = r.GetDecimal(4);
             }
+            if (type is "Q" or "W" or "I" && !await Permissions.Has(http, Permissions.WriteFor(type))) return Permissions.Denied(Permissions.WriteFor(type));
             if (type is not ("Q" or "W" or "I")) return Results.Json(new { error = "Credit memos cannot be edited; void it and create a new one." }, statusCode: 409);
             if (voided) return Results.Json(new { error = "A voided document cannot be edited." }, statusCode: 409);
             if (DateTime.SpecifyKind(input.UpdatedAt.Value, DateTimeKind.Utc) != DateTime.SpecifyKind(updated, DateTimeKind.Utc))

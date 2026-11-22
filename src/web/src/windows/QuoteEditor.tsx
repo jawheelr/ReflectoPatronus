@@ -129,7 +129,7 @@ export function QuoteEditor({ initial, onSaved, onOpen, onNew, extraTools }: {
       <Toolbar tools={[
         { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty, title: dirty ? 'Save (Ctrl+S)' : 'No changes to save' },
         { label: 'Open', icon: 'open', onClick: guard(onOpen), title: 'Open a document' },
-        { label: 'Void', icon: 'delete', onClick: voidIt, disabled: busy || !initial, title: initial ? `Void this ${noun}` : 'Save the quote first' },
+        { label: 'Void', icon: 'delete', onClick: voidIt, disabled: busy || !initial || !api.can(me, 'documents.void'), title: !api.can(me, 'documents.void') ? 'You do not have permission to void documents' : initial ? `Void this ${noun}` : 'Save the quote first' },
         { label: 'New', icon: 'clear', onClick: guard(onNew), title: 'Start a new quote' }, ...(extraTools?.(guard) ?? [])]} />
       {error && <p className="formerr">{error}</p>}
       <Tabs tabs={['General', 'Insurance', 'Installation', 'Notes']} active={tab} onChange={setTab} />

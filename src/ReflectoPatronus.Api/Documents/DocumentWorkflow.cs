@@ -18,14 +18,14 @@ public static class DocumentWorkflow
 {
     public static void Map(RouteGroupBuilder docs)
     {
-        docs.MapPost("/{id:int}/convert", Convert);
+        docs.MapPost("/{id:int}/convert", Convert);   // permission depends on the target type: checked inside
         // Called when a document is sent to the printer, so "Printed" on the form shows when it last was.
         docs.MapPost("/{id:int}/printed", async (int id, NpgsqlDataSource db, CancellationToken ct) =>
         {
             await using var c = db.CreateCommand("UPDATE document SET printed_at = now() WHERE id = $1");
             c.Parameters.AddWithValue(id);
             return await c.ExecuteNonQueryAsync(ct) > 0 ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequirePermission("documents.read");
     }
 
     const string HeaderCopy = """
@@ -37,10 +37,11 @@ public static class DocumentWorkflow
 
     static IResult Conflict(string m) => Results.Json(new { error = m }, statusCode: 409);
 
-    static async Task<IResult> Convert(int id, ConvertRequest req, ClaimsPrincipal user, NpgsqlDataSource db, CancellationToken ct)
+    static async Task<IResult> Convert(int id, ConvertRequest req, ClaimsPrincipal user, HttpContext http, NpgsqlDataSource db, CancellationToken ct)
     {
         var to = req.To?.ToUpperInvariant();
         if (to is not ("W" or "I" or "C")) return Results.BadRequest(new { error = "to must be W, I or C." });
+        if (!await Permissions.Has(http, Permissions.WriteFor(to))) return Permissions.Denied(Permissions.WriteFor(to));
         await using var cn = await db.OpenConnectionAsync(ct);
         await using var tx = await cn.BeginTransactionAsync(ct);
         await using (var lk = new NpgsqlCommand("SELECT pg_advisory_xact_lock(7001)", cn, tx)) await lk.ExecuteNonQueryAsync(ct);

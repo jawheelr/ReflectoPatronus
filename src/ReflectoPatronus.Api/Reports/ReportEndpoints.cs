@@ -1,4 +1,5 @@
 using Npgsql;
+using ReflectoPatronus.Api.Auth;
 using NpgsqlTypes;
 
 namespace ReflectoPatronus.Api.Reports;
@@ -80,14 +81,14 @@ public static class ReportEndpoints
         new("list-parts", "List Flat Glass Parts", "File Listing", None, [C("code", "Code"), C("description", "Description"), C("uom", "Unit"), C("price", "Price (first category)", "money")],
             "SELECT p.code, p.description, u.short_name, (SELECT coalesce(nullif(x.price1, 0), nullif(x.price4, 0)) FROM part_price x JOIN part_thickness th ON th.id = x.part_thickness_id WHERE th.part_id = p.id ORDER BY x.price_category NULLS LAST, th.thick_den LIMIT 1) FROM part p LEFT JOIN unit_of_measure u ON u.id = p.uom_id WHERE p.source = 'P' ORDER BY upper(p.code)"),
         new("list-users", "List Users", "File Listing", None, [C("code", "Sign-in"), C("name", "Name"), C("role", "Role"), C("status", "Status")],
-            "SELECT code, name, CASE WHEN is_admin THEN 'Administrator' ELSE 'User' END, CASE WHEN password_hash IS NULL THEN 'No sign-in' WHEN active THEN 'Active' ELSE 'Inactive' END FROM app_user WHERE password_hash IS NOT NULL OR active ORDER BY lower(code)"),
+            "SELECT code, name, coalesce((SELECT string_agg(g.name, ', ' ORDER BY g.name) FROM user_group ug JOIN app_group g ON g.id = ug.group_id WHERE ug.user_id = app_user.id), '(no group)'), CASE WHEN password_hash IS NULL THEN 'No sign-in' WHEN active THEN 'Active' ELSE 'Inactive' END FROM app_user WHERE password_hash IS NOT NULL OR active ORDER BY lower(code)"),
         new("list-companies", "List Companies", "File Listing", None, [C("name", "Name"), C("address", "Address"), C("phone", "Phone"), C("email", "E-mail")],
             "SELECT name, concat_ws(', ', nullif(address1, ''), nullif(city, ''), nullif(state, '')), phone, email FROM company ORDER BY id"),
     ];
 
     public static void Map(RouteGroupBuilder api)
     {
-        var g = api.MapGroup("/reports");
+        var g = api.MapGroup("/reports").RequirePermission("reports.view");
         g.MapGet("", () => Results.Ok(Defs.Select(d => new { d.Id, d.Title, d.Group, d.Params, d.Columns, d.Note })));
         g.MapGet("/{id}", Run);
     }

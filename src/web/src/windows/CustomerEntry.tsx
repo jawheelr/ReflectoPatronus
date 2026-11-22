@@ -116,9 +116,9 @@ export function CustomerEntry({ initialId }: { initialId?: number }) {
   return (
     <>
       <Toolbar tools={[
-        { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty, title: dirty ? 'Save (Ctrl+S)' : 'No changes to save' },
-        { label: 'Delete', icon: 'delete', onClick: remove, disabled: busy || id == null || !shell.me.isAdmin, title: shell.me.isAdmin ? 'Delete this customer' : 'Only administrators can delete customers' },
-        { label: 'New', icon: 'clear', onClick: () => { if (confirmDiscard()) { setId(null); setTab('General') } }, title: 'Start a new customer' },
+        { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty || !api.can(shell.me, 'customers.write'), title: !api.can(shell.me, 'customers.write') ? 'You do not have permission to change customers' : dirty ? 'Save (Ctrl+S)' : 'No changes to save' },
+        { label: 'Delete', icon: 'delete', onClick: remove, disabled: busy || id == null || !api.can(shell.me, 'customers.delete'), title: api.can(shell.me, 'customers.delete') ? 'Delete this customer' : 'You do not have permission to delete customers' },
+        { label: 'New', icon: 'clear', onClick: () => { if (confirmDiscard()) { setId(null); setTab('General') } }, disabled: !api.can(shell.me, 'customers.write'), title: 'Start a new customer' },
         { label: 'Notes', icon: 'notes', onClick: () => setTab('Notes'), title: 'Printed and internal notes' }]} />
       <div className="form">
         <Field label="Code">{text('number', '9rem', { autoFocus: id == null })}<button className="dots" title="Look up a customer" onClick={() => { if (confirmDiscard()) setLookup(true) }}>…</button>

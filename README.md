@@ -6,7 +6,7 @@ Developer: Jarred Wheeler
 Replacement for the legacy system (flat-glass quoting/invoicing): PostgreSQL 17 + ASP.NET Core API and a React web console (a Windows/Tauri and an iOS client are planned), runnable on **Docker** or **Proxmox LXC** from the same config. Remote access can require a device certificate (mTLS) with post-quantum key exchange.
 
 ## Screenshots
-Light and dark themes, a built-in knowledge base under **Help**, and editable customers, quotes that become work orders and invoices, credit memos, payments and receivables, printing with per-device printer profiles, and editable maintenance tables. (Entries shown are made-up examples.)
+Light and dark themes, a built-in knowledge base under **Help**, and editable customers, quotes that become work orders and invoices, credit memos, payments and receivables, printing with per-device printer profiles, role-based users and groups, reports, a weekly update check, and editable maintenance tables. (Entries shown are made-up examples.)
 
 | | |
 |---|---|

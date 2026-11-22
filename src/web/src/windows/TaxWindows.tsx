@@ -10,7 +10,7 @@ export const TaxCodeEntry = () => <MaintenanceEditor table="tax-codes" />
 
 /** A tax group is a code, a description and up to five tax codes in fixed positions; its combined rate is shown live. */
 export function TaxGroupEntry() {
-  const shell = useShell(), admin = shell.me.isAdmin
+  const shell = useShell(), admin = api.can(shell.me, 'maintenance.write')
   const [groups, setGroups] = useState<api.TaxGroup[]>([]); const [codes, setCodes] = useState<api.TaxCode[]>([])
   const [sel, setSel] = useState<string | null>(null); const [isNew, setIsNew] = useState(false)
   const [code, setCode] = useState(''); const [desc, setDesc] = useState(''); const [slots, setSlots] = useState<string[]>(['', '', '', '', ''])
@@ -49,10 +49,10 @@ export function TaxGroupEntry() {
   return (
     <>
       <Toolbar tools={[
-        { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty || !admin, title: admin ? 'Save' : 'Only administrators can change these' },
+        { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty || !admin, title: admin ? 'Save' : 'You do not have permission to change these' },
         { label: 'Delete', icon: 'delete', onClick: remove, disabled: busy || !sel || !admin },
         { label: 'New', icon: 'clear', onClick: startNew, disabled: !admin }]} />
-      {!admin && <p className="muted">You can look at tax groups; only an administrator can change them.</p>}
+      {!admin && <p className="muted">You can look at tax groups; you need permission to change them.</p>}
       {error && <p className="formerr">{error}</p>}
       <div className="maint">
         <div>

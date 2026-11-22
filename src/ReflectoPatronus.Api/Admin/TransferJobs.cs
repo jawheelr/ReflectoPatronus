@@ -41,7 +41,7 @@ public static class TransferJobs
 
     public static void Map(WebApplication app, RouteGroupBuilder api)
     {
-        var g = api.MapGroup("/admin/transfer").RequireAdmin();
+        var g = api.MapGroup("/admin/transfer").RequirePermission("transfer.manage");
         g.MapGet("/files", (IConfiguration cfg) =>
         {
             var d = Dir(cfg);

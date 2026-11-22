@@ -19,7 +19,7 @@ const fromItem = (i: api.ItemDetail): Form => ({
 
 /** Glass types (source G) and parts (source P): code, unit, thicknesses and the price of each thickness per price category. */
 export function CatalogEditor({ source }: { source: 'G' | 'P' }) {
-  const shell = useShell(), winId = useWinId(), admin = shell.me.isAdmin
+  const shell = useShell(), winId = useWinId(), admin = api.can(shell.me, 'catalog.write')
   const word = source === 'G' ? 'glass type' : 'part'
   const [list, setList] = useState<api.ItemSummary[]>([]); const [q, setQ] = useState('')
   const [sel, setSel] = useState<number | null>(null); const [isNew, setIsNew] = useState(false)
@@ -69,16 +69,16 @@ export function CatalogEditor({ source }: { source: 'G' | 'P' }) {
   return (
     <>
       <Toolbar tools={[
-        { label: 'Save', icon: 'save', onClick: save, disabled: !admin || busy || !dirty, title: !admin ? 'Only administrators can change the catalog' : 'Save (Ctrl+S)' },
+        { label: 'Save', icon: 'save', onClick: save, disabled: !admin || busy || !dirty, title: !admin ? 'You do not have permission to change the catalog' : 'Save (Ctrl+S)' },
         { label: 'New', icon: 'clear', onClick: startNew, disabled: !admin, title: `Add a ${word}` },
         { label: 'Delete', icon: 'delete', onClick: remove, disabled: !admin || sel == null || isNew, title: `Delete this ${word}` }]} />
       {error && <p className="formerr">{error}</p>}
       <div className="maint wide">
         <div>
           <input className="search" placeholder={`Search ${word}s…`} value={q} onChange={e => setQ(e.target.value)} />
-          <div className="maint-list"><table className="grid-table"><thead><tr><th>Code</th><th>Description</th></tr></thead>
-            <tbody>{list.map(i => <tr key={i.id} className={i.id === sel ? 'sel' : ''} onClick={() => choose(i.id)} style={{ cursor: 'pointer' }}><td>{i.code}</td><td>{i.description}</td></tr>)}
-              {list.length === 0 && <tr><td colSpan={2} className="muted">Nothing found.</td></tr>}</tbody></table></div>
+          <div className="maint-list"><table className="grid-table"><thead><tr><th>Code</th><th>Description</th><th>Unit</th><th>Thickness</th><th className="num">Price</th></tr></thead>
+            <tbody>{list.map(i => <tr key={i.id} className={i.id === sel ? 'sel' : ''} onClick={() => choose(i.id)} style={{ cursor: 'pointer' }}><td>{i.code}</td><td title={i.description ?? ''}>{i.description}</td><td>{i.unit}</td><td title={i.thicknessList ?? ''}>{i.thicknessList}</td><td className="num">{i.price != null ? i.price.toFixed(2) : ''}</td></tr>)}
+              {list.length === 0 && <tr><td colSpan={5} className="muted">Nothing found.</td></tr>}</tbody></table></div>
         </div>
         <div className="maint-form">
           {!show && <p className="muted">Choose a {word}, or click New.</p>}

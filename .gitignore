@@ -26,3 +26,4 @@ __pycache__/
 src/ReflectoPatronus.Api/wwwroot/
 ._*
 .DS_Store
+backups/

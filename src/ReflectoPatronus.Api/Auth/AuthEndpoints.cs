@@ -187,6 +187,8 @@ public static class AuthEndpoints
         cmd.Parameters.AddWithValue(code.Trim());
         cmd.Parameters.AddWithValue(Hasher.HashPassword(new object(), pw));
         await cmd.ExecuteNonQueryAsync();
+        await using (var grp = db.CreateCommand("INSERT INTO user_group (user_id, group_id) SELECT u.id, g.id FROM app_user u, app_group g WHERE u.code = $1 AND g.code = 'administrators' ON CONFLICT DO NOTHING"))
+        { grp.Parameters.AddWithValue(code.Trim()); await grp.ExecuteNonQueryAsync(); }
         log.LogWarning("Bootstrap admin '{User}' created/updated. Remove Bootstrap__* settings now.", code.Trim());
     }
 }

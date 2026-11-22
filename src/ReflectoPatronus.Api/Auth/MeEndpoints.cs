@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace ReflectoPatronus.Api.Auth;
 
-public record MeResponse(int Id, string Code, string? Name, string TimeZone, string? UserTimeZone, string CompanyTimeZone, bool IsAdmin);
+public record MeResponse(int Id, string Code, string? Name, string TimeZone, string? UserTimeZone, string CompanyTimeZone, bool IsAdmin, IReadOnlyList<string> Permissions, IReadOnlyList<string> Groups);
 public record UpdateSettingsRequest(string? TimeZone);
 
 public static class MeEndpoints
@@ -58,7 +58,12 @@ public static class MeEndpoints
         await using var r = await cmd.ExecuteReaderAsync(ct);
         await r.ReadAsync(ct);
         var userTz = r.IsDBNull(2) ? null : r.GetString(2);
-        var isAdmin = r.GetBoolean(3); var company = r.GetString(4);
-        return new MeResponse(id, r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), userTz ?? company, userTz, company, isAdmin);
+        var company = r.GetString(4);
+        var code = r.GetString(0); var name = r.IsDBNull(1) ? null : r.GetString(1);
+        await r.CloseAsync();
+        var perms = await Auth.Permissions.Load(db, id, ct);
+        var groups = new List<string>();
+        await using (var g = db.CreateCommand("SELECT g.name FROM user_group ug JOIN app_group g ON g.id = ug.group_id WHERE ug.user_id = $1 ORDER BY g.name")) { g.Parameters.AddWithValue(id); await using var gr = await g.ExecuteReaderAsync(ct); while (await gr.ReadAsync(ct)) groups.Add(gr.GetString(0)); }
+        return new MeResponse(id, code, name, userTz ?? company, userTz, company, perms.Contains(Auth.Permissions.All), perms.Order().ToList(), groups);
     }
 }

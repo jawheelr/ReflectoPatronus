@@ -19,6 +19,7 @@ RUN dotnet publish -c Release -o /out --no-restore && tar -C /out -czf /api.tar.
 
 FROM debian:12-slim
 ARG RP_VERSION=dev
+ARG GIT_SHA=unknown
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       systemd systemd-sysv dbus ifupdown iproute2 iputils-ping procps ca-certificates curl gnupg sudo locales openssl \
@@ -48,5 +49,11 @@ RUN install -m 0755 /opt/reflectopatronus/bundle/deploy/lxc/rp-setup.sh /usr/loc
  && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-gateway.service /etc/systemd/system/rp-gateway.service \
  && useradd --system --home /var/lib/rp-gateway --shell /usr/sbin/nologin rpgw \
  && printf '#!/usr/bin/env bash\nCERT_DIR=/root/rp-gateway-pki exec bash /opt/reflectopatronus/bundle/scripts/issue-device-cert.sh "$@"\n' > /usr/local/sbin/rp-issue-device && chmod 0755 /usr/local/sbin/rp-issue-device \
+ && install -m 0755 /opt/reflectopatronus/bundle/deploy/lxc/rp-update.sh /usr/local/sbin/rp-update \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-check.service /etc/systemd/system/rp-update-check.service \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-check.timer /etc/systemd/system/rp-update-check.timer \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-motd.sh /etc/profile.d/rp-update-motd.sh \
+ && systemctl enable rp-update-check.timer \
+ && echo "$GIT_SHA" > /opt/reflectopatronus/COMMIT \
  && echo "$RP_VERSION" > /opt/reflectopatronus/VERSION && touch /opt/reflectopatronus/.preinstalled \
  && find /opt/reflectopatronus -name '._*' -delete

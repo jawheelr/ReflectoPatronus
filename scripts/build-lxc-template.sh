@@ -9,10 +9,14 @@ VER="${1:-$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)}"; 
 PLATFORM="${RP_TEMPLATE_PLATFORM:-linux/amd64}"
 ARCH="${PLATFORM#linux/}"
 mkdir -p "$ROOT/dist"
-docker build --platform "$PLATFORM" -f "$ROOT/deploy/lxc/template/Dockerfile" --build-arg "RP_VERSION=$VER" -t "rp-lxc-template:$VER" "$ROOT"
+docker build --platform "$PLATFORM" -f "$ROOT/deploy/lxc/template/Dockerfile" --build-arg "RP_VERSION=$VER" --build-arg "GIT_SHA=${GIT_SHA:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}" -t "rp-lxc-template:$VER" "$ROOT"
 CID="$(docker create --platform "$PLATFORM" "rp-lxc-template:$VER" /bin/true)"
 trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
 if command -v zstd >/dev/null; then OUT="$ROOT/dist/reflectopatronus-$VER-$ARCH.tar.zst"; docker export "$CID" | zstd -19 -T0 -q -o "$OUT" -f
 else OUT="$ROOT/dist/reflectopatronus-$VER-$ARCH.tar.gz"; docker export "$CID" | gzip -9 > "$OUT"; fi
 ( cd "$ROOT/dist" && shasum -a 256 "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
-echo "built $OUT"; ls -lh "$OUT"
+# The in-place update bundle used by `rp-update` inside running containers: the API build, the migrations and the scripts, plus the commit.
+UPD="$ROOT/dist/reflectopatronus-update-$VER.tar.gz"; STAGE="$(mktemp -d)"
+docker cp "$CID:/opt/reflectopatronus/." "$STAGE/" && rm -f "$STAGE/.preinstalled" && tar -C "$STAGE" -czf "$UPD" . && rm -rf "$STAGE"
+( cd "$ROOT/dist" && shasum -a 256 "$(basename "$UPD")" > "$(basename "$UPD").sha256" )
+echo "built $OUT and $UPD"; ls -lh "$OUT" "$UPD"

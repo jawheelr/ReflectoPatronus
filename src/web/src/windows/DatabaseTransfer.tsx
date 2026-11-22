@@ -23,9 +23,9 @@ export function DatabaseTransfer() {
   const timer = useRef<number>(0)
 
   const refresh = useCallback(() => api.getTransferFiles().then(setFiles).catch(e => setError(e.message)), [])
-  useEffect(() => { if (me.isAdmin) void refresh() }, [me.isAdmin, refresh])
+  useEffect(() => { if (api.can(me, 'transfer.manage')) void refresh() }, [me, refresh])
   useEffect(() => () => window.clearInterval(timer.current), [])
-  if (!me.isAdmin) return <div className="form"><p>Administrator access is required.</p></div>
+  if (!api.can(me, 'transfer.manage')) return <div className="form"><p>You do not have permission to export or import the database.</p></div>
 
   function watch(id: string) {
     window.clearInterval(timer.current)
