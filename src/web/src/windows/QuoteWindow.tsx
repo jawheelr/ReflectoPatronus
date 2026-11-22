@@ -4,10 +4,11 @@ import { instant, money, plainDate } from '../format'
 import { useShell, useWinId } from '../shell/WindowContext'
 import { Audit, Field, Modal, RO, Tabs, Toolbar } from '../shell/ui'
 import { DocumentBrowser, TYPE_NAMES } from './DocumentBrowser'
+import { QuoteEditor } from './QuoteEditor'
 
 const TYPES = ['Q', 'W', 'I', 'C']
 
-/** The legacy system "Quote" window (the same window serves quotes, work orders, invoices and credits via Document Type). Read-only for now. */
+/** The "Quote" window (the same window serves quotes, work orders, invoices and credits via Document Type). Quotes are editable; the rest are read-only for now. */
 export function QuoteWindow({ initialId }: { initialId?: number }) {
   const { me, open, setTitle } = useShell(), winId = useWinId()
   const [docType, setDocType] = useState('Q')
@@ -33,14 +34,15 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
     if (exact.length === 1) load(exact[0].id); else setLookup(n)
   }
 
+  const editing = docType === 'Q' && (d == null || d.editable)
   const status = d?.statuses.at(-1)?.status
   const t = d?.totals
   return (
     <>
-      <Toolbar tools={[
+      {!editing && <Toolbar tools={[
         { label: 'Save', icon: 'save' }, { label: 'Print', icon: 'print' }, { label: 'E-mail', icon: 'email' },
         { label: 'Open', icon: 'open', onClick: () => setLookup(''), title: 'Open a document' },
-        { label: 'Delete', icon: 'delete' }, { label: 'Clear', icon: 'clear', onClick: clear, title: 'Clear the form' }]} />
+        { label: 'Delete', icon: 'delete' }, { label: 'Clear', icon: 'clear', onClick: clear, title: 'Clear the form' }]} />}
       <div className="form">
         <div className="doc-id">
           <Field label="Document Type">
@@ -56,6 +58,7 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
           {d?.voided && <span className="badge">VOID</span>}
         </div>
         {error && <p className="error">{error}</p>}
+        {editing ? <QuoteEditor key={d?.id ?? 'new'} initial={d} onSaved={load} onOpen={() => setLookup('')} onNew={clear} /> : <>
         <Tabs tabs={['General', 'Insurance', 'Installation', 'Other', 'Notes']} active={tab} onChange={setTab} />
         <div className="panel">
           {tab === 'General' && <div className="general">
@@ -121,6 +124,7 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
           </tfoot>}
         </table>
         {d && <p className="muted small">* not taxable · Glass {money(t!.glass)} · Parts {money(t!.part)} · Labor {money(t!.labor)} · Other {money(t!.custom)}</p>}
+        </>}
       </div>
       <Audit createdAt={d ? instant(d.createdAt, me.timeZone) : undefined} />
       {lookup !== null && (

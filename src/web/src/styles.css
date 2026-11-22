@@ -153,3 +153,8 @@ kbd { font: inherit; font-size: .75rem; padding: .05rem .4rem; border: 1px solid
 .kb article { max-width: 46rem; line-height: 1.55; max-height: 34rem; overflow: auto; padding-right: .5rem; } .kb article h3 { margin-top: 0; } .kb article h4 { margin: 1.1rem 0 .3rem; }
 .kb article li { margin: .2rem 0; }
 @media (max-width: 760px) { .kb { grid-template-columns: 1fr; } .kb nav { border-right: 0; max-height: 14rem; } }
+.qe input, .qe select { max-width: 100%; box-sizing: border-box; } .qe td { vertical-align: top; } .qe small.muted { display: block; }
+.qe input.locked { background: var(--hover); } .qe .warn { color: #b26a00; font-size: .78rem; text-align: right; } .qe tfoot td { border-color: transparent; }
+.picker { position: relative; } .picker input { width: 100%; }
+.picker ul { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; margin: 0; padding: .2rem 0; list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 18px rgba(20,30,50,.2); max-height: 15rem; overflow: auto; min-width: 16rem; }
+.picker li button { display: flex; flex-direction: column; width: 100%; text-align: left; border: 0; background: none; padding: .3rem .6rem; } .picker li button small { color: var(--muted); } .picker li button:hover { background: var(--hover); }

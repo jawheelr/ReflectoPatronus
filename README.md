@@ -6,14 +6,15 @@ Developer: Jarred Wheeler
 Replacement for the legacy system (flat-glass quoting/invoicing): PostgreSQL 17 + ASP.NET Core API and a React web console (a Windows/Tauri and an iOS client are planned), runnable on **Docker** or **Proxmox LXC** from the same config. Remote access can require a device certificate (mTLS) with post-quantum key exchange.
 
 ## Screenshots
-Light and dark themes, a built-in knowledge base under **Help**, and editable customers and maintenance tables. (Entries shown are made-up examples.)
+Light and dark themes, a built-in knowledge base under **Help**, and editable customers, quotes with live server-side pricing, and editable maintenance tables. (Entries shown are made-up examples.)
 
 | | |
 |---|---|
 | ![Sign in, dark](docs/screenshots/login-dark.png) | ![Sign in, light](docs/screenshots/login-light.png) |
 | **Customer entry** (dark) ![Customer entry, dark](docs/screenshots/customer-entry.png) | **Customer entry** (light) ![Customer entry, light](docs/screenshots/customer-entry-light.png) |
 | **Maintenance tables** ![Price categories editor](docs/screenshots/maintenance-price-categories.png) | **Help > Knowledge Base** ![Knowledge base](docs/screenshots/help-knowledge-base.png) |
-| **Supplier pricing** ![Supplier pricing](docs/screenshots/supplier-pricing.png) | **Import / export** ![Import and export](docs/screenshots/import-export.png) |
+| **Quote entry** ![Quote editor](docs/screenshots/quote-editor.png) | **Supplier pricing** ![Supplier pricing](docs/screenshots/supplier-pricing.png) |
+| **Import / export** ![Import and export](docs/screenshots/import-export.png) | |
 
 | Doc | What |
 |---|---|

@@ -92,7 +92,8 @@ export const deleteCustomer = (id: number) => call<void>(`/customers/${id}`, { m
 export const getCustomerLookups = () => call<CustomerLookups>('/lookups/customer')
 
 export interface DocumentSummary { id: number; type: string; number: string; date: string; customerId: number | null; customerName: string | null; poNumber: string | null; voided: boolean; total: number }
-export interface DocumentLine { seq: number; parentSeq: number | null; source: string; qty: number | null; partCode: string | null; description: string | null; dims: string | null; shape: string | null; thickness: string | null; unitPrice: number | null; listPrice: number | null; multiplier: number; amount: number; taxable: boolean }
+export interface DocumentLine { seq: number; parentSeq: number | null; source: string; qty: number | null; partCode: string | null; description: string | null; dims: string | null; shape: string | null; thickness: string | null; unitPrice: number | null; listPrice: number | null; multiplier: number; amount: number; taxable: boolean
+  thickNum: number | null; thickDen: number | null; widthIn: number | null; heightIn: number | null; partId: number | null; units: number | null; specialPrice: boolean; amountOverride: boolean }
 export interface DocumentParty { name: string | null; address1: string | null; address2: string | null; city: string | null; state: string | null; zip: string | null; phones: string[] }
 export interface DocumentDetail {
   id: number; type: string; typeName: string; number: string; date: string; lossDate: string | null; voided: boolean
@@ -105,7 +106,7 @@ export interface DocumentDetail {
   lines: DocumentLine[]; taxes: { code: string; percent: number; amount: number }[]
   installers: { code: string; name: string | null; hours: number | null; amount: number | null }[]
   statuses: { at: string | null; status: string; note: string | null }[]; revisions: { at: string; total: number | null; comment: string | null }[]
-  shopOrMobile: string | null
+  shopOrMobile: string | null; updatedAt: string; salesPersonId: number | null; editable: boolean
 }
 export interface DocumentQuery { type?: string; customerId?: number; q?: string; from?: string; to?: string; includeVoided?: boolean; offset?: number; limit?: number }
 export const searchDocuments = (f: DocumentQuery) => {
@@ -120,6 +121,25 @@ export const searchDocuments = (f: DocumentQuery) => {
   return call<Page<DocumentSummary>>(`/documents?${p}`)
 }
 export const getDocument = (id: number) => call<DocumentDetail>(`/documents/${id}`)
+
+// Quote entry: the server prices everything; the client only sends what the user typed.
+export interface DraftLine { source: string; qty: number | null; partId: number | null; thickNum: number | null; thickDen: number | null; widthIn: number | null; heightIn: number | null
+  units: number | null; priceLevel: number | null; rate: number | null; unitPrice: number | null; amount: number | null; description: string | null; taxable: boolean | null }
+export interface DraftDocument { customerId: number | null; priceCategory: string | null; taxGroup: string | null; discountPercent: number | null; lines: DraftLine[] }
+export interface PricedLine { seq: number; source: string; qty: number; partCode: string | null; description: string | null; thickness: string | null; dims: string | null
+  sqFt: number | null; rate: number | null; unitPrice: number | null; amount: number; taxable: boolean; specialPrice: boolean; warnings: string[] }
+export interface CalcResult { lines: PricedLine[]; taxes: { code: string; percent: number; amount: number }[]; subtotal: number; tax: number; total: number; priceCategory: string | null; taxGroup: string | null; warnings: string[] }
+export interface DocumentInput extends DraftDocument {
+  date: string | null; poNumber: string | null; salesPersonId: number | null; terms: string | null; shopOrMobile: string | null
+  specialInstructions: string | null; workOrderInstructions: string | null; notePrinted: string | null; noteInternal: string | null
+  jobSite: DocumentParty | null; lossDate: string | null; policyNumber: string | null; claimNumber: string | null; updatedAt: string | null
+}
+export interface CatalogPart { id: number; code: string; description: string | null; source: string; uomId: number | null; thicknesses: { num: number; den: number; text: string }[] }
+export const calculateDocument = (d: DraftDocument) => call<CalcResult>('/documents/calculate', { method: 'POST', body: JSON.stringify(d) })
+export const createDocument = (d: DocumentInput) => call<{ id: number; number: string; total: number }>('/documents', { method: 'POST', body: JSON.stringify(d) })
+export const updateDocument = (id: number, d: DocumentInput) => call<{ total: number }>(`/documents/${id}`, { method: 'PUT', body: JSON.stringify(d) })
+export const voidDocument = (id: number) => call<void>(`/documents/${id}/void`, { method: 'POST' })
+export const getCatalogParts = (q: string, source: 'G' | 'P') => call<CatalogPart[]>(`/catalog/parts?q=${encodeURIComponent(q)}&source=${source}`)
 
 export interface TaxCode { code: string; description: string | null; percent: number; taxesLabor: boolean; nonCalc: boolean }
 export interface TaxGroup { code: string; description: string | null; codes: { position: number; code: string; description: string | null; percent: number }[] }

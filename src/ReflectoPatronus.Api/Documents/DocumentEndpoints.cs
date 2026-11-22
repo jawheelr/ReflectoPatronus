@@ -6,7 +6,8 @@ namespace ReflectoPatronus.Api.Documents;
 public record DocumentSummary(int Id, string Type, string Number, DateOnly Date, int? CustomerId, string? CustomerName,
     string? PoNumber, bool Voided, decimal Total);
 public record DocumentLine(int Seq, int? ParentSeq, string Source, int? Qty, string? PartCode, string? Description, string? Dims,
-    string? Shape, string? Thickness, decimal? UnitPrice, decimal? ListPrice, decimal Multiplier, decimal Amount, bool Taxable);
+    string? Shape, string? Thickness, decimal? UnitPrice, decimal? ListPrice, decimal Multiplier, decimal Amount, bool Taxable,
+    short? ThickNum, short? ThickDen, decimal? WidthIn, decimal? HeightIn, int? PartId, decimal? Units, bool SpecialPrice, bool AmountOverride);
 public record DocumentTaxLine(string Code, decimal Percent, decimal Amount);
 public record DocumentInstaller(string Code, string? Name, decimal? Hours, decimal? Amount);
 public record DocumentStatusEvent(DateTime? At, string Status, string? Note);
@@ -20,7 +21,8 @@ public record DocumentDetail(int Id, string Type, string TypeName, string Number
     decimal? DiscountPercent, string? SpecialInstructions, string? WorkOrderInstructions, string? NotePrinted, string? NoteInternal,
     DateTime CreatedAt, DateTime? PrintedAt, DocumentTotals Totals, IReadOnlyList<DocumentLine> Lines,
     IReadOnlyList<DocumentTaxLine> Taxes, IReadOnlyList<DocumentInstaller> Installers,
-    IReadOnlyList<DocumentStatusEvent> Statuses, IReadOnlyList<DocumentRevision> Revisions, string? ShopOrMobile);
+    IReadOnlyList<DocumentStatusEvent> Statuses, IReadOnlyList<DocumentRevision> Revisions, string? ShopOrMobile,
+    DateTime UpdatedAt, int? SalesPersonId, bool Editable);
 
 public static class DocumentEndpoints
 {
@@ -29,6 +31,7 @@ public static class DocumentEndpoints
         var g = api.MapGroup("/documents");
         g.MapGet("", List);
         g.MapGet("/{id:int}", GetById);
+        DocumentEdit.Map(api, g);
     }
 
     static readonly string[] Types = ["Q", "W", "I", "C", "R"];
@@ -99,7 +102,8 @@ public static class DocumentEndpoints
                    d.cust_address1, d.cust_address2, d.cust_city, d.cust_state, d.cust_zip, d.cust_phones,
                    d.loc_address1, d.loc_address2, d.loc_city, d.loc_state, d.loc_zip,
                    d.po_number, d.policy_number, d.claim_number, d.source_doc_number, d.terms, s.name, d.tax_group, d.price_category,
-                   d.discount_pct, d.spec_instructions, d.wo_instructions, d.note_printed, d.note_internal, d.created_at, d.printed_at, d.shop_or_mobile
+                   d.discount_pct, d.spec_instructions, d.wo_instructions, d.note_printed, d.note_internal, d.created_at, d.printed_at, d.shop_or_mobile,
+                   d.updated_at, d.staff_sales_id
             FROM document d
             JOIN doc_type dt ON dt.code = d.doc_type
             LEFT JOIN staff s ON s.id = d.staff_sales_id
@@ -123,14 +127,15 @@ public static class DocumentEndpoints
         decimal? disc = r.IsDBNull(28) ? null : r.GetDecimal(28);
         string? spec = S(r, 29), wo = S(r, 30), notePrinted = S(r, 31), noteInternal = S(r, 32);
         var created = r.GetDateTime(33); DateTime? printed = r.IsDBNull(34) ? null : r.GetDateTime(34);
-        var shopOrMobile = S(r, 35);
+        var shopOrMobile = S(r, 35); var updatedAt = r.GetDateTime(36); int? salesId = r.IsDBNull(37) ? null : r.GetInt32(37);
         await r.CloseAsync();
 
         var lines = new List<DocumentLine>();
         await using (var c = db.CreateCommand("""
             SELECT seq, parent_seq, source::text, qty, part_code, description, dims, shape,
                    CASE WHEN thick_num IS NULL THEN NULL ELSE thickness_text(thick_num, thick_den) END,
-                   unit_price, list_price, multiplier, amount, taxable
+                   unit_price, list_price, multiplier, amount, taxable, thick_num, thick_den, dims, (SELECT id FROM part WHERE upper(code) = upper(part_code)), uom_units,
+                   special_price, amount_override
             FROM document_line WHERE document_id = $1 ORDER BY seq, id
             """))
         {
@@ -141,7 +146,9 @@ public static class DocumentEndpoints
                     lr.IsDBNull(3) ? null : lr.GetInt32(3), CustomerEndpoints.Str(lr, 4), CustomerEndpoints.Str(lr, 5),
                     CustomerEndpoints.Str(lr, 6), CustomerEndpoints.Str(lr, 7), CustomerEndpoints.Str(lr, 8),
                     lr.IsDBNull(9) ? null : lr.GetDecimal(9), lr.IsDBNull(10) ? null : lr.GetDecimal(10), lr.GetDecimal(11),
-                    lr.GetDecimal(12), lr.GetBoolean(13)));
+                    lr.GetDecimal(12), lr.GetBoolean(13), lr.IsDBNull(14) ? null : lr.GetInt16(14), lr.IsDBNull(15) ? null : lr.GetInt16(15),
+                    PricingEngine.DecodeDims(CustomerEndpoints.Str(lr, 16))?.W, PricingEngine.DecodeDims(CustomerEndpoints.Str(lr, 16))?.H,
+                    lr.IsDBNull(17) ? null : lr.GetInt32(17), lr.IsDBNull(18) ? null : lr.GetDecimal(18), lr.GetBoolean(19), lr.GetBoolean(20)));
         }
 
         var taxes = new List<DocumentTaxLine>();
@@ -194,6 +201,6 @@ public static class DocumentEndpoints
 
         return Results.Ok(new DocumentDetail(id, typeCode, typeName, number, date, loss, voided, custId, billId, customer, site, po, policy,
             claim, src, terms, sales, taxGroup, priceCat, disc, spec, wo, notePrinted, noteInternal, created, printed, totals,
-            lines, taxes, installers, statuses, revisions, shopOrMobile));
+            lines, taxes, installers, statuses, revisions, shopOrMobile, updatedAt, salesId, typeCode == "Q" && !voided));
     }
 }
