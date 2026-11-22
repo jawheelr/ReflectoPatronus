@@ -32,19 +32,36 @@ tr { break-inside: avoid } thead { display: table-header-group } .child td:nth-c
 export const esc = (s: string | number | null | undefined) =>
   String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
-/** Print through a hidden frame so the page's own styles never leak into the printout; the OS dialog then lists the device's printers. */
+/**
+ * Print through a hidden frame so the page's own styles never leak into the printout; the OS dialog then lists the device's printers.
+ * The frame is page-sized but parked off-screen: browsers silently skip print() on 0x0 or display:none frames.
+ * If the frame cannot print, falls back to a popup window.
+ */
 export function printHtml(html: string): Promise<void> {
   return new Promise(resolve => {
     const f = document.createElement('iframe')
-    f.setAttribute('aria-hidden', 'true'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
-    f.srcdoc = html
+    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:8.5in;height:11in;border:0;opacity:0;pointer-events:none'
+    let finished = false
+    const done = () => { if (finished) return; finished = true; setTimeout(() => f.remove(), 1000); resolve() }
+    const popup = () => {
+      const w = window.open('', '_blank', 'width=900,height=700')
+      if (!w) { alert('The print window was blocked by the browser. Allow pop-ups for this site and try again.'); return done() }
+      w.document.open(); w.document.write(html); w.document.close()
+      w.addEventListener('afterprint', () => { w.close() }, { once: true })
+      setTimeout(() => { w.focus(); w.print() }, 300)
+      done()
+    }
     f.onload = () => {
-      const w = f.contentWindow!
-      const done = () => { setTimeout(() => f.remove(), 500); resolve() }
+      const w = f.contentWindow
+      if (!w || w.location.href === 'about:blank' && !w.document.body?.children.length) return
       w.addEventListener('afterprint', done, { once: true })
-      setTimeout(() => { w.focus(); w.print() }, 50)
+      setTimeout(() => {
+        try { w.focus(); w.print() } catch { popup() }
+      }, 100)
       setTimeout(done, 120000)
     }
+    f.srcdoc = html
     document.body.appendChild(f)
   })
 }
