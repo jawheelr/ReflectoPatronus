@@ -61,6 +61,7 @@ AuthEndpoints.Map(api);
 MeEndpoints.Map(api);
 CustomerEndpoints.Map(api);
 DocumentEndpoints.Map(api);
+ReflectoPatronus.Api.Receivables.ReceivableEndpoints.Map(api);
 TaxEndpoints.Map(api);
 MaintenanceEndpoints.Map(api);
 PricingEndpoints.Map(api);

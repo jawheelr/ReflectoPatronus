@@ -22,7 +22,7 @@ public record DocumentDetail(int Id, string Type, string TypeName, string Number
     DateTime CreatedAt, DateTime? PrintedAt, DocumentTotals Totals, IReadOnlyList<DocumentLine> Lines,
     IReadOnlyList<DocumentTaxLine> Taxes, IReadOnlyList<DocumentInstaller> Installers,
     IReadOnlyList<DocumentStatusEvent> Statuses, IReadOnlyList<DocumentRevision> Revisions, string? ShopOrMobile,
-    DateTime UpdatedAt, int? SalesPersonId, bool Editable);
+    DateTime UpdatedAt, int? SalesPersonId, bool Editable, decimal Balance, decimal Paid);
 
 public static class DocumentEndpoints
 {
@@ -32,6 +32,7 @@ public static class DocumentEndpoints
         g.MapGet("", List);
         g.MapGet("/{id:int}", GetById);
         DocumentEdit.Map(api, g);
+        DocumentWorkflow.Map(g);
     }
 
     static readonly string[] Types = ["Q", "W", "I", "C", "R"];
@@ -199,8 +200,16 @@ public static class DocumentEndpoints
         var totals = new DocumentTotals(linesTotal, Sum(l => l.Taxable), taxTotal, linesTotal + taxTotal,
             Sum(l => l.Source == "glass"), Sum(l => l.Source == "part"), Sum(l => l.Source == "labor"), Sum(l => l.Source == "custom"));
 
+        decimal balance = 0, paid = 0;
+        await using (var c = db.CreateCommand("SELECT coalesce(sum(amount), 0), coalesce(-sum(amount) FILTER (WHERE purpose IN (4, 5)), 0) FROM ar_entry WHERE document_id = $1"))
+        {
+            c.Parameters.AddWithValue(id);
+            await using var br = await c.ExecuteReaderAsync(ct);
+            if (await br.ReadAsync(ct)) { balance = br.GetDecimal(0); paid = br.GetDecimal(1); }
+        }
+
         return Results.Ok(new DocumentDetail(id, typeCode, typeName, number, date, loss, voided, custId, billId, customer, site, po, policy,
             claim, src, terms, sales, taxGroup, priceCat, disc, spec, wo, notePrinted, noteInternal, created, printed, totals,
-            lines, taxes, installers, statuses, revisions, shopOrMobile, updatedAt, salesId, typeCode == "Q" && !voided));
+            lines, taxes, installers, statuses, revisions, shopOrMobile, updatedAt, salesId, typeCode is "Q" or "W" or "I" && !voided, balance, paid));
     }
 }

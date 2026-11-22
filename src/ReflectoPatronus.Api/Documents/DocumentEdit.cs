@@ -15,8 +15,8 @@ public record CatalogThickness(short Num, short Den, string Text);
 public record CatalogPart(int Id, string Code, string? Description, string Source, int? UomId, IReadOnlyList<CatalogThickness> Thicknesses);
 
 /// <summary>
-/// Quote entry. Only QUOTES can be created and edited for now (work orders, invoices and credits are read-only until the
-/// ledger side is built). Prices are always computed here by <see cref="PricingEngine"/>; the client never sends totals.
+/// Document entry: quotes are created here; quotes, work orders and invoices can be edited (credit memos are fixed once created). The
+/// ledger follows invoices (see Ledger). Prices are always computed here by <see cref="PricingEngine"/>; the client never sends totals.
 /// </summary>
 public static class DocumentEdit
 {
@@ -228,10 +228,10 @@ public static class DocumentEdit
                 if (!await r.ReadAsync(ct)) return Results.NotFound();
                 type = r.GetString(0).Trim(); voided = r.GetBoolean(1); updated = r.GetDateTime(2); oldCustomer = r.IsDBNull(3) ? null : r.GetInt32(3); oldTotal = r.GetDecimal(4);
             }
-            if (type != "Q") return Results.Json(new { error = "Only quotes can be edited for now." }, statusCode: 409);
-            if (voided) return Results.Json(new { error = "A voided quote cannot be edited." }, statusCode: 409);
+            if (type is not ("Q" or "W" or "I")) return Results.Json(new { error = "Credit memos cannot be edited; void it and create a new one." }, statusCode: 409);
+            if (voided) return Results.Json(new { error = "A voided document cannot be edited." }, statusCode: 409);
             if (DateTime.SpecifyKind(input.UpdatedAt.Value, DateTimeKind.Utc) != DateTime.SpecifyKind(updated, DateTimeKind.Utc))
-                return Results.Json(new { error = "Someone else changed this quote since you opened it. Reload it and try again." }, statusCode: 409);
+                return Results.Json(new { error = "Someone else changed this document since you opened it. Reload it and try again." }, statusCode: 409);
 
             await using var up = new NpgsqlCommand("""
                 UPDATE document SET doc_date = coalesce($1, doc_date), po_number = $2, staff_sales_id = $3, tax_group = $4, price_category = $5, discount_pct = $6,
@@ -264,6 +264,7 @@ public static class DocumentEdit
                 rev.Parameters.AddWithValue(oldTotal == calc.Total ? "Edited" : $"Edited (was {oldTotal:0.00})");
                 await rev.ExecuteNonQueryAsync(ct);
             }
+            if (type == "I") await Ledger.SyncInvoiceDebit(cn, tx, id, input.CustomerId!.Value, calc.Total, user.UserId(), ct);
             await tx.CommitAsync(ct);
             return Results.Ok(new { total = calc.Total });
         }
@@ -272,13 +273,24 @@ public static class DocumentEdit
 
     static async Task<IResult> Void(int id, ClaimsPrincipal user, NpgsqlDataSource db, CancellationToken ct)
     {
-        await using var c = db.CreateCommand("UPDATE document SET voided = true, updated_at = now(), updated_by = $2 WHERE id = $1 AND doc_type = 'Q' AND NOT voided");
-        c.Parameters.AddWithValue(id); c.Parameters.AddWithValue(user.UserId());
-        if (await c.ExecuteNonQueryAsync(ct) > 0) return Results.NoContent();
-        await using var e = db.CreateCommand("SELECT doc_type, voided FROM document WHERE id = $1");
-        e.Parameters.AddWithValue(id);
-        await using var r = await e.ExecuteReaderAsync(ct);
-        if (!await r.ReadAsync(ct)) return Results.NotFound();
-        return Results.Json(new { error = r.GetString(0).Trim() != "Q" ? "Only quotes can be voided for now." : "Already voided." }, statusCode: 409);
+        await using var cn = await db.OpenConnectionAsync(ct);
+        await using var tx = await cn.BeginTransactionAsync(ct);
+        string type; bool voided;
+        await using (var e = new NpgsqlCommand("SELECT doc_type, voided FROM document WHERE id = $1 FOR UPDATE", cn, tx))
+        {
+            e.Parameters.AddWithValue(id);
+            await using var r = await e.ExecuteReaderAsync(ct);
+            if (!await r.ReadAsync(ct)) return Results.NotFound();
+            (type, voided) = (r.GetString(0).Trim(), r.GetBoolean(1));
+        }
+        if (voided) return Results.Json(new { error = "Already voided." }, statusCode: 409);
+        if (type == "R") return Results.Json(new { error = "This document type cannot be voided." }, statusCode: 409);
+        if (await Ledger.AppliedPayments(cn, tx, id, ct) != 0)
+            return Results.Json(new { error = "Payments are applied to this document. Void those payments first." }, statusCode: 409);
+        await Ledger.ReverseDocument(cn, tx, id, user.UserId(), ct);
+        await using (var c = new NpgsqlCommand("UPDATE document SET voided = true, updated_at = now(), updated_by = $2 WHERE id = $1", cn, tx))
+        { c.Parameters.AddWithValue(id); c.Parameters.AddWithValue(user.UserId()); await c.ExecuteNonQueryAsync(ct); }
+        await tx.CommitAsync(ct);
+        return Results.NoContent();
     }
 }
