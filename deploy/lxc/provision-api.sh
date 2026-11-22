@@ -32,10 +32,15 @@ install -m 0644 -o root -g rpapi /root/pki-in/ca.crt /etc/reflectopatronus/pki/c
 install -m 0644 -o root -g rpapi /root/pki-in/api-client.crt /etc/reflectopatronus/pki/api-client.crt
 install -m 0600 -o rpapi -g rpapi /root/pki-in/api-client.key /etc/reflectopatronus/pki/api-client.key   # stricter than Docker dev
 
+# With the mTLS gateway enabled (GATEWAY_SHARED_SECRET in rp.env) the API only listens locally and requires the gateway.
+API_BIND=0.0.0.0; GW_ON=false
+if [[ -n ${GATEWAY_SHARED_SECRET:-} ]]; then API_BIND=127.0.0.1; GW_ON=true; fi
 cat > /etc/reflectopatronus/api.env <<ENV
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://0.0.0.0:8080
+ASPNETCORE_URLS=http://$API_BIND:8080
 Security__RequirePqcVerification=${REQUIRE_PQC_VERIFICATION:-false}
+${GATEWAY_SHARED_SECRET:+Gateway__Mode=require
+Gateway__SharedSecret=$GATEWAY_SHARED_SECRET}
 ${BOOTSTRAP_ADMIN_PASSWORD:+Bootstrap__AdminUser=${BOOTSTRAP_ADMIN_USER:-ADMIN}
 Bootstrap__AdminPassword=$BOOTSTRAP_ADMIN_PASSWORD}
 Database__ConnectionString=Host=db;Port=5432;Database=$POSTGRES_DB;Username=$APP_DB_USER;Password=$APP_DB_PASSWORD;SSL Mode=VerifyFull;Root Certificate=/etc/reflectopatronus/pki/ca.crt;SSL Certificate=/etc/reflectopatronus/pki/api-client.crt;SSL Key=/etc/reflectopatronus/pki/api-client.key;Timeout=8;Command Timeout=15;GSS Encryption Mode=Disable;

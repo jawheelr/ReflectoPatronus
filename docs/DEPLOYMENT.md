@@ -67,7 +67,7 @@ pct exec 211 -- bash /opt/reflectopatronus/bundle/deploy/lxc/provision-api.sh
 Passwords must not contain `;` or `'` (they go into a connection string / SQL literal). `rp.env` contains secrets: delete it from the CT once provisioned, or keep it `chmod 600`.
 
 ### Downloadable LXC template (no repo checkout needed on the host)
-Every push to `main` refreshes the rolling `edge` pre-release (`reflectopatronus-edge-amd64.tar.zst`); every release (`v*` tag) attaches `reflectopatronus-<version>-amd64.tar.zst` and a `.sha256` to its GitHub Release. It is a Debian 12 container root filesystem with PostgreSQL 17, the ASP.NET Core 10 runtime, the API + web console and the provisioning scripts already installed, so provisioning needs no internet. One template serves both roles; you pick `db` or `api` when you run `rp-setup`. (`.github/workflows/lxc-template.yml` builds it; `scripts/build-lxc-template.sh` builds it locally.)
+Every push to `main` refreshes the rolling `edge` pre-release (`reflectopatronus-edge-amd64.tar.zst`); every release (`v*` tag) attaches `reflectopatronus-<version>-amd64.tar.zst` and a `.sha256` to its GitHub Release. It is a Debian 12 container root filesystem with PostgreSQL 17, the ASP.NET Core 10 runtime, the API + web console and the provisioning scripts already installed, so provisioning needs no internet. One template serves every layout; the setup wizard asks what the container should run: **all** (database and application together in one container, the simplest; the database then listens on 127.0.0.1 only), **db** only, or **api** only (two containers, as described above). (`.github/workflows/lxc-template.yml` builds it; `scripts/build-lxc-template.sh` builds it locally.)
 
 On the **Proxmox host**:
 ```bash
@@ -87,10 +87,13 @@ Setup starts by itself the first time a container boots from the template: open 
 
 | Container | Asked |
 |---|---|
+| `all` | everything in the `db` row (except the listen address, fixed to 127.0.0.1) and the `api` row (except the database address), certificates are generated or taken from your directory (`ca`, `server`, `api-client`) |
 | `db` | database name, admin role + password, application role + password, listen address (defaults to the container's IP), certificates: generate a private CA + server/API client certs, or point at your own directory |
 | `api` | database address, database name, application role + the password set on `db`, first admin user + password, certificates (the `.tgz` the `db` step produced, or your own files) |
 
 Generated passwords are shown once and saved to `/root/rp.env` (mode 0600). The `db` step ends by printing the `pct pull` / `pct push` line that moves `rp-pki-for-api.tgz` to the API container. Answers already in `/root/rp.env` are not asked again, so you can pre-seed the file and run `rp-setup db --yes` / `rp-setup api --yes` for an unattended install; `--no-provision` only collects answers and certificates. Passwords need 12+ characters and none of `; ' " \ $` or spaces. (The older manual route, writing `rp.env` yourself and running `provision-<role>.sh`, still works.)
+
+**Preconfiguring (unattended install):** copy [deploy/lxc/preseed.env.example](../deploy/lxc/preseed.env.example), fill it in (`RP_ROLE=all|db|api`, plus the first administrator's login and password, which you always choose yourself; there is no default login), and put it in the container as `/root/rp-preseed.env` (`pct push <ctid> preseed.env /root/rp-preseed.env --perms 0600`, or `pct-create.sh ... --preseed preseed.env`). The first-boot wizard picks it up on its own, asks only for what is missing, installs, checks that the administrator login works, then deletes the preseed file and removes the first-admin password from `rp.env` and `api.env`. The Docker equivalent is `./scripts/setup.sh --yes` with `BOOTSTRAP_ADMIN_USER` / `BOOTSTRAP_ADMIN_PASSWORD` exported.
 
 `deploy/lxc/pct-create.sh --template local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst ...` does the create/push work for you if you have the repo on the host (including the data-mount prompt). With a bind mount, chown the host directory to `100000:100000` first. The template contains no secrets, certs or data. It is amd64 only. **Not yet tested on a real Proxmox host.**
 
@@ -114,6 +117,31 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml --env-file .env 
 Pin a release with `RP_TAG=1.0.0` in `.env`.
 
 **Proxmox VE 9.1+, LXC from an OCI image (not yet tested here):** Proxmox can pull an OCI image into template storage (web UI: storage -> CT Templates -> *Pull from OCI registry*, registry `ghcr.io`; or `pveam`) and create an unprivileged container from it. Pin a tag, never `latest`. Application containers are a tech preview in 9.1, so the Debian-based provisioning above remains the supported LXC route. If you use OCI containers you must supply at run time what compose supplies: the env vars from `docker-compose.yml`, the three cert files (`api` -> `/run/db-certs/`, `db` -> `/run/input-certs/` as `ca.crt`, `server.crt`, `server.key`), a mount for `/var/lib/postgresql/data` on the `db` container, and a network where the API can resolve the host name `db`.
+
+## Remote access: mTLS + post-quantum gateway (behind a Synology / router)
+Clients (web console, Windows/Tauri, iOS) should reach the server through a **gateway** that requires a **device certificate (mTLS)** and offers the **post-quantum hybrid key exchange X25519MLKEM768**. It is Caddy (a static Go binary with its own TLS stack, so it does not depend on the container's OpenSSL), TLS 1.3 only, in front of the API.
+
+**Layout with a Synology reverse proxy.** Keep 80/443 forwarded to the Synology for Let's Encrypt and its other sites. The gateway listens on its **own port** (default `8443`); forward that TCP port on the router **straight to the gateway host**, not through the Synology. The Synology reverse proxy cannot be in this path: DSM regenerates its nginx config, has no client-certificate option, and would terminate TLS itself, so neither mTLS nor post-quantum would reach the client.
+```
+iPhone / Windows ---TLS1.3 + client cert + X25519MLKEM768---> router :8443 ---> gateway ---HTTP (internal)---> API ---mTLS---> PostgreSQL
+                  (80/443 -> Synology: unchanged)
+```
+**Enable it:** answer **y** to "Enable the remote-access gateway" in `./scripts/setup.sh` (Docker) or in the first-boot wizard / `rp-setup` (LXC; preseed keys `RP_GATEWAY`, `GATEWAY_HOSTNAMES`, `GATEWAY_PORT`, `RP_DEVICE_NAME`). It creates a private **device CA** and the gateway's server certificate, and sets `Gateway__Mode=require` on the API: the API then refuses any request that did not come through the gateway (shared secret) or that lacks a verified certificate, and each login session is **bound to the certificate's fingerprint**, so a stolen token is useless without the device's key. In this mode `http://host:8080` no longer works directly; set `GATEWAY_MODE=off` in `.env` (Docker) to allow LAN access as well.
+
+**Devices.** Issue one certificate per device and import the `.p12` there:
+```bash
+./scripts/issue-device-cert.sh jarreds-ipad          # Docker: certs/devices/jarreds-ipad.p12 (password shown once)
+rp-issue-device jarreds-ipad                          # LXC: /root/rp-gateway-pki/devices/jarreds-ipad.p12; fetch with pct pull
+```
+iPhone/iPad: open the `.p12` (AirDrop/Files), install the profile in Settings, enter the password. Windows: double-click, "Current User", leave the key non-exportable. Add `--legacy-p12` only if a device refuses the default file format. The SwiftUI / Tauri apps present the identity from the Keychain / certificate store; the web console uses the one installed in the browser.
+
+**Server certificate.** By default it is signed by the device CA, so native apps pin that CA (`certs/client-ca.crt`) and browsers must trust it too. To use the Let's Encrypt certificate from the Synology instead (trusted everywhere, no pinning), export it and put it at `certs/gateway.crt` / `certs/gateway.key` before running setup (the CA is still needed to verify devices). The name must match the host clients use.
+
+**Check it:** `./scripts/check-gateway.sh rp.example.net:8443 jarreds-ipad` (runs OpenSSL 3.5 in a container) confirms that a client without a certificate is refused, that `X25519MLKEM768` is negotiated, and that a certificate gets through.
+
+**Post-quantum support by client:** the server prefers the hybrid when the client offers it, otherwise it falls back to classical X25519 (still TLS 1.3 + mTLS). Apple enables it by default from iOS/macOS 26; current Chromium-based browsers and WebView2 offer it; Windows Schannel support is recent, so check the Microsoft KB for your build. The database link's PQC gate (`Security__RequirePqcVerification`) is separate and still unverified.
+
+**Not built yet:** certificate revocation lists (revoke a device by disabling its session in the API and keeping certificate lifetimes short, `--days`), and a one-time-code enrollment flow (certificates are issued by an administrator with the scripts above). Back up `client-ca.key` offline: it signs every device certificate. **Tested here:** the Caddy gateway against a stand-in backend (no certificate and a certificate from another CA are refused, `X25519MLKEM768` negotiated, spoofed headers overwritten, fingerprint forwarded) and the API's gateway mode and session binding against the real API. **Not tested:** the full `setup.sh` / `rp-setup` run with the gateway on, the LXC gateway service, and real iOS/Windows clients.
 
 ## Converting between them
 The data lives only in PostgreSQL, so conversion is a dump/restore of one database; schema and config are identical.

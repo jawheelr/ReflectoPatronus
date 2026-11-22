@@ -10,6 +10,8 @@
 #   When --data-mount is omitted and you run this from a terminal, you are PROMPTED for it.
 #   --template local:vztmpl/reflectopatronus-X.Y.Z-amd64.tar.zst   use the downloadable ReflectoPatronus template (everything preinstalled)
 #       instead of stock Debian 12 + installing at provision time; then --artifact is optional.
+#   --preseed FILE   answers for the first-time setup (see deploy/lxc/preseed.env.example), pushed as /root/rp-preseed.env;
+#                    the setup then runs without prompting on the container console.
 #   pct-create.sh --role api --ctid 211 --name rp-api --ip 10.10.10.11/24 --gw 10.10.10.1 [--bridge vmbr1] [--certs DIR] [--artifact FILE]
 #
 # Recommended topology (mirrors the compose file): TWO containers on a private bridge/VLAN. Only the API container is
@@ -17,7 +19,7 @@
 set -euo pipefail
 
 ROLE="" CTID="" NAME="" IP="dhcp" GW="" BRIDGE="vmbr0" STORAGE="local-lvm" TPL_STORAGE="local"
-MEM=2048 CORES=2 DISK=16 CERTS="" ARTIFACT="" DATA_MOUNT="" TEMPLATE=""
+MEM=2048 CORES=2 DISK=16 CERTS="" ARTIFACT="" DATA_MOUNT="" TEMPLATE="" PRESEED=""
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 while [[ $# -gt 0 ]]; do
@@ -25,7 +27,7 @@ while [[ $# -gt 0 ]]; do
     --role) ROLE="$2"; shift 2;; --ctid) CTID="$2"; shift 2;; --name) NAME="$2"; shift 2;;
     --ip) IP="$2"; shift 2;; --gw) GW="$2"; shift 2;; --bridge) BRIDGE="$2"; shift 2;;
     --storage) STORAGE="$2"; shift 2;; --memory) MEM="$2"; shift 2;; --cores) CORES="$2"; shift 2;;
-    --disk) DISK="$2"; shift 2;; --certs) CERTS="$2"; shift 2;; --artifact) ARTIFACT="$2"; shift 2;; --data-mount) DATA_MOUNT="$2"; shift 2;; --template) TEMPLATE="$2"; shift 2;;
+    --disk) DISK="$2"; shift 2;; --certs) CERTS="$2"; shift 2;; --artifact) ARTIFACT="$2"; shift 2;; --data-mount) DATA_MOUNT="$2"; shift 2;; --template) TEMPLATE="$2"; shift 2;; --preseed) PRESEED="$2"; shift 2;;
     *) echo "unknown option $1" >&2; exit 2;;
   esac
 done
@@ -84,7 +86,9 @@ pct create "$CTID" "$TPL_REF" \
   --hostname "$NAME" --ostype debian --unprivileged 1 --features nesting=0 \
   --cores "$CORES" --memory "$MEM" --swap 512 --rootfs "$STORAGE:$DISK" \
   --net0 "$NET" --onboot 1 "${MP_ARGS[@]}"
+[[ -z $PRESEED || -f $PRESEED ]] || { echo "preseed file not found: $PRESEED" >&2; exit 2; }
 pct start "$CTID"
+[[ -n $PRESEED ]] && pct push "$CTID" "$PRESEED" /root/rp-preseed.env --perms 0600
 for _ in $(seq 1 30); do pct exec "$CTID" -- getent hosts deb.debian.org >/dev/null 2>&1 && break; sleep 2; done
 
 # Bundle only what provisioning needs (never legacy/, certs/, .env).

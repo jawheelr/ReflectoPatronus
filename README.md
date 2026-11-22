@@ -14,6 +14,6 @@ Replacement for the legacy system (flat-glass quoting/invoicing): PostgreSQL 17 
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker and LXC setup, converting between them, what is tested |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/STARTER-README.md](docs/STARTER-README.md) | Original scaffold notes (TLS/mTLS/PQC gate) |
 
-Quick start (Docker): `./scripts/generate-dev-certs.sh`, copy `.env.example` to `.env` and set passwords, `docker compose --env-file .env up -d --build`, `./scripts/migrate.sh docker`.
+Quick start (Docker): `./scripts/setup.sh`. It generates the database passwords and certificates, asks you to choose the first administrator's login and password (there is no default login), starts the stack, applies the migrations, verifies the login and then removes the password from `.env`. Add `--ghcr` to use the published images. The manual route (`generate-dev-certs.sh`, edit `.env`, `docker compose up`, `migrate.sh docker`) still works.
 
 `legacy/` holds the legacy system backup and is git-ignored. Never commit it.

@@ -24,7 +24,7 @@ sealed class TokenAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> optio
         var hash = Tokens.Hash(header[7..].Trim());
 
         await using var cmd = db.CreateCommand("""
-            SELECT s.id, u.id, u.code, u.name, s.last_seen_at
+            SELECT s.id, u.id, u.code, u.name, s.last_seen_at, s.cert_fingerprint
             FROM device_session s JOIN app_user u ON u.id = s.user_id
             WHERE s.access_hash = $1 AND s.revoked_at IS NULL AND s.access_expires_at > now() AND u.active
             """);
@@ -32,6 +32,10 @@ sealed class TokenAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> optio
         await using var r = await cmd.ExecuteReaderAsync(Context.RequestAborted);
         if (!await r.ReadAsync(Context.RequestAborted))
             return AuthenticateResult.Fail("Invalid or expired token.");
+
+        var boundTo = r.IsDBNull(5) ? null : r.GetString(5);
+        if (boundTo is not null && !string.Equals(boundTo, GatewayGuard.Fingerprint(Context), StringComparison.Ordinal))
+            return AuthenticateResult.Fail("Token is bound to a different device certificate.");   // fails closed: also when no gateway headers are present
 
         var sessionId = r.GetGuid(0);
         var claims = new List<Claim>

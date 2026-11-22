@@ -35,6 +35,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # The database cluster is NOT created here: /var/lib/postgresql is usually a separate mount (see pct-create.sh
 # --data-mount), and the cluster must be created on it at first provisioning.
+# Caddy is a static Go binary: it brings its own TLS stack (hybrid X25519MLKEM768), independent of Debian 12's OpenSSL 3.0.
+COPY --from=caddy:2-alpine /usr/bin/caddy /usr/local/bin/caddy
 COPY deploy /opt/reflectopatronus/bundle/deploy
 COPY db /opt/reflectopatronus/bundle/db
 COPY scripts /opt/reflectopatronus/bundle/scripts
@@ -43,5 +45,8 @@ COPY --from=api /api.tar.gz /opt/reflectopatronus/api-dist.tar.gz
 RUN install -m 0755 /opt/reflectopatronus/bundle/deploy/lxc/rp-setup.sh /usr/local/sbin/rp-setup \
  && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-firstboot.service /etc/systemd/system/rp-firstboot.service \
  && systemctl enable rp-firstboot.service \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-gateway.service /etc/systemd/system/rp-gateway.service \
+ && useradd --system --home /var/lib/rp-gateway --shell /usr/sbin/nologin rpgw \
+ && printf '#!/usr/bin/env bash\nCERT_DIR=/root/rp-gateway-pki exec bash /opt/reflectopatronus/bundle/scripts/issue-device-cert.sh "$@"\n' > /usr/local/sbin/rp-issue-device && chmod 0755 /usr/local/sbin/rp-issue-device \
  && echo "$RP_VERSION" > /opt/reflectopatronus/VERSION && touch /opt/reflectopatronus/.preinstalled \
  && find /opt/reflectopatronus -name '._*' -delete

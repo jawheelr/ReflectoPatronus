@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace ReflectoPatronus.Api.Auth;
 
@@ -32,7 +33,7 @@ public static class AuthEndpoints
         me.MapDelete("/sessions/{id:guid}", RevokeSession);
     }
 
-    static async Task<IResult> Login(LoginRequest req, NpgsqlDataSource db, CancellationToken ct)
+    static async Task<IResult> Login(LoginRequest req, HttpContext http, NpgsqlDataSource db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.UserCode) || string.IsNullOrEmpty(req.Password)
             || string.IsNullOrWhiteSpace(req.DeviceName) || !Platforms.Contains(req.Platform))
@@ -91,8 +92,8 @@ public static class AuthEndpoints
 
         var access = Tokens.New(); var refresh = Tokens.New();
         await using var ins = db.CreateCommand("""
-            INSERT INTO device_session (user_id, platform, device_name, access_hash, access_expires_at, refresh_hash, refresh_expires_at)
-            VALUES ($1, $2, $3, $4, now() + $5, $6, now() + $7)
+            INSERT INTO device_session (user_id, platform, device_name, access_hash, access_expires_at, refresh_hash, refresh_expires_at, cert_fingerprint)
+            VALUES ($1, $2, $3, $4, now() + $5, $6, now() + $7, $8)
             """);
         ins.Parameters.AddWithValue(userId!.Value);
         ins.Parameters.AddWithValue(req.Platform);
@@ -101,13 +102,14 @@ public static class AuthEndpoints
         ins.Parameters.AddWithValue(AccessLifetime);
         ins.Parameters.AddWithValue(Tokens.Hash(refresh));
         ins.Parameters.AddWithValue(RefreshLifetime);
+        ins.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = (object?)GatewayGuard.Fingerprint(http) ?? DBNull.Value });
         await ins.ExecuteNonQueryAsync(ct);
         return Results.Ok(new TokenResponse(access, refresh, (int)AccessLifetime.TotalSeconds,
             new UserInfo(userId.Value, req.UserCode.Trim(), name, tz!)));
     }
 
     /// <summary>Rotates both tokens. The old refresh token stops working immediately.</summary>
-    static async Task<IResult> Refresh(RefreshRequest req, NpgsqlDataSource db, CancellationToken ct)
+    static async Task<IResult> Refresh(RefreshRequest req, HttpContext http, NpgsqlDataSource db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.RefreshToken)) return Results.BadRequest(new { error = "refreshToken required." });
         var access = Tokens.New(); var refresh = Tokens.New();
@@ -117,6 +119,7 @@ public static class AuthEndpoints
             FROM app_user u
             WHERE s.refresh_hash = $1 AND s.revoked_at IS NULL AND s.refresh_expires_at > now()
               AND u.id = s.user_id AND u.active
+              AND (s.cert_fingerprint IS NULL OR s.cert_fingerprint = $6)   -- bound sessions need the same device certificate
             RETURNING u.id, u.code, u.name,
                       coalesce(u.time_zone, (SELECT time_zone FROM company ORDER BY id LIMIT 1), 'America/Chicago')
             """);
@@ -125,6 +128,7 @@ public static class AuthEndpoints
         cmd.Parameters.AddWithValue(AccessLifetime);
         cmd.Parameters.AddWithValue(Tokens.Hash(refresh));
         cmd.Parameters.AddWithValue(RefreshLifetime);
+        cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = (object?)GatewayGuard.Fingerprint(http) ?? DBNull.Value });
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct))
             return Results.Json(new { error = "Invalid or expired refresh token." }, statusCode: StatusCodes.Status401Unauthorized);

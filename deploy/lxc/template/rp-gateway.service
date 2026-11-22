@@ -1,0 +1,24 @@
+[Unit]
+Description=ReflectoPatronus remote-access gateway (mTLS, post-quantum key exchange)
+After=network-online.target reflectopatronus-api.service
+Wants=network-online.target
+
+[Service]
+User=rpgw
+Group=rpgw
+EnvironmentFile=/etc/reflectopatronus/gateway.env
+Environment=XDG_DATA_HOME=/var/lib/rp-gateway XDG_CONFIG_HOME=/var/lib/rp-gateway
+StateDirectory=rp-gateway
+ExecStart=/usr/local/bin/caddy run --config /etc/reflectopatronus/Caddyfile
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

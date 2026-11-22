@@ -9,6 +9,8 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Security__RequirePqcVerification: ${REQUIRE_PQC_VERIFICATION:-false}
       # First run only: creates this user with this password if NO user has a password yet. Remove afterwards.
+      Gateway__Mode: ${GATEWAY_MODE:-off}
+      Gateway__SharedSecret: ${GATEWAY_SHARED_SECRET:-}
       Bootstrap__AdminUser: ${BOOTSTRAP_ADMIN_USER:-}
       Bootstrap__AdminPassword: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       Database__ConnectionString: "Host=db;Port=5432;Database=${POSTGRES_DB:-reflectopatronus};Username=${APP_DB_USER:-reflectopatronus_app};Password=${APP_DB_PASSWORD};SSL Mode=VerifyFull;Root Certificate=/run/db-certs/ca.crt;SSL Certificate=/run/db-certs/api-client.crt;SSL Key=/run/db-certs/api-client.key;Timeout=8;Command Timeout=15;GSS Encryption Mode=Disable;"
@@ -58,6 +60,30 @@ services:
       timeout: 5s
       retries: 20
       start_period: 20s
+
+  # Remote access with mTLS + post-quantum key exchange (compose profile "gateway": COMPOSE_PROFILES=gateway in .env,
+  # set up by scripts/setup.sh). Publish GATEWAY_PORT on your router; keep 80/443 for other services (e.g. Synology).
+  gateway:
+    image: caddy:2-alpine
+    profiles: ["gateway"]
+    environment:
+      GATEWAY_PORT: ${GATEWAY_PORT:-8443}
+      GATEWAY_SHARED_SECRET: ${GATEWAY_SHARED_SECRET:-}
+      API_UPSTREAM: api:8080
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_PORT:-8443}:${GATEWAY_PORT:-8443}"
+    volumes:
+      - ./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs/gateway.crt:/certs/gateway.crt:ro
+      - ./certs/gateway.key:/certs/gateway.key:ro
+      - ./certs/client-ca.crt:/certs/client-ca.crt:ro
+    networks:
+      - app
+    restart: unless-stopped
 
 networks:
   app:

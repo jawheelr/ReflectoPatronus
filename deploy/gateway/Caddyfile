@@ -1,0 +1,27 @@
+# Remote-access gateway: TLS 1.3 only, client certificate REQUIRED (mTLS), then reverse proxy to the API.
+# Post-quantum: Caddy built with Go 1.24+ offers the hybrid X25519MLKEM768 key exchange by default and prefers it when the
+# client supports it (iOS/macOS 26+, current Chromium/Edge/Chrome, Firefox). Older clients fall back to classical X25519.
+# Verify with scripts/check-gateway.sh. This file is shared by Docker (compose profile "gateway") and the LXC template.
+# Environment: GATEWAY_PORT (8443), GATEWAY_CERT_DIR (/certs), API_UPSTREAM (api:8080), GATEWAY_SHARED_SECRET (required)
+{
+	admin off
+	auto_https off
+}
+
+:{$GATEWAY_PORT:8443} {
+	tls {$GATEWAY_CERT_DIR:/certs}/gateway.crt {$GATEWAY_CERT_DIR:/certs}/gateway.key {
+		protocols tls1.3
+		client_auth {
+			mode require_and_verify
+			trust_pool file {$GATEWAY_CERT_DIR:/certs}/client-ca.crt
+		}
+	}
+
+	reverse_proxy {$API_UPSTREAM:api:8080} {
+		# Always overwritten: whatever a client sends in these headers is discarded.
+		header_up X-RP-Gateway-Key {$GATEWAY_SHARED_SECRET}
+		header_up X-RP-Client-Cert-Fp {http.request.tls.client.fingerprint}
+		header_up X-Forwarded-Proto https
+		flush_interval -1
+	}
+}

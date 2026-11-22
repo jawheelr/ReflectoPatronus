@@ -23,6 +23,8 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+GatewayGuard.Use(app);   // before everything else: no static file or API response without the gateway when Gateway:Mode=require
+
 // The React console (built by scripts/build-web.sh into wwwroot) is served from the same origin as the API: no CORS.
 var serveWeb = File.Exists(Path.Combine(app.Environment.WebRootPath ?? "", "index.html"));
 if (serveWeb)
