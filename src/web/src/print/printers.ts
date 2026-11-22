@@ -27,7 +27,7 @@ export interface PrinterProfile {
   copies: number
   color: boolean
 }
-export interface PrintPrefs { profiles: PrinterProfile[]; defaults: Partial<Record<DocKind, string>>; showPricesOnWorkOrder: boolean }
+export interface PrintPrefs { profiles: PrinterProfile[]; defaults: Partial<Record<DocKind, string>>; showPricesOnWorkOrder: boolean; watermark: boolean }
 
 const KEY = 'rp.printers'
 export const newProfile = (name = 'New printer'): PrinterProfile => ({
@@ -36,9 +36,9 @@ export const newProfile = (name = 'New printer'): PrinterProfile => ({
 export function loadPrefs(): PrintPrefs {
   try {
     const p = JSON.parse(localStorage.getItem(KEY) ?? 'null') as PrintPrefs | null
-    if (p && Array.isArray(p.profiles) && p.profiles.length) return { ...p, defaults: p.defaults ?? {}, showPricesOnWorkOrder: p.showPricesOnWorkOrder ?? false }
+    if (p && Array.isArray(p.profiles) && p.profiles.length) return { ...p, defaults: p.defaults ?? {}, showPricesOnWorkOrder: p.showPricesOnWorkOrder ?? false, watermark: p.watermark ?? false }
   } catch { /* fall through */ }
-  return { profiles: [{ ...newProfile('Default printer'), id: 'default' }], defaults: {}, showPricesOnWorkOrder: false }
+  return { profiles: [{ ...newProfile('Default printer'), id: 'default' }], defaults: {}, showPricesOnWorkOrder: false, watermark: false }
 }
 export const savePrefs = (p: PrintPrefs) => localStorage.setItem(KEY, JSON.stringify(p))
 
