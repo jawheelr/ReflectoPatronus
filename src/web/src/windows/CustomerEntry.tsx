@@ -123,7 +123,7 @@ export function CustomerEntry({ initialId }: { initialId?: number }) {
       <div className="form">
         <Field label="Code">{text('number', '9rem', { autoFocus: id == null })}<button className="dots" title="Look up a customer" onClick={() => { if (confirmDiscard()) setLookup(true) }}>…</button>
           {dirty && <span className="dirty">unsaved changes</span>}</Field>
-        <Field label="Balance"><RO value={c ? money(c.balance) : ''} width="9rem" /></Field>
+        <Field label="Balance"><RO value={c ? money(c.balance) : ''} width="9rem" />{c && <button className="dots" title="Open this customer's account: open invoices, payments, statement" onClick={() => shell.open('receivables', c.id)}>↗</button>}</Field>
         {error && <p className="formerr">{error}</p>}
         <Tabs tabs={['General', 'Finance/Tax', 'Notes', 'Documents']} active={tab} onChange={setTab} />
         <div className="panel">

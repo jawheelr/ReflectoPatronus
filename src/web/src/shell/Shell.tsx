@@ -9,13 +9,15 @@ import { SettingsWindow } from '../windows/SettingsWindow'
 import { TaxCodeEntry, TaxGroupEntry } from '../windows/TaxWindows'
 import { MAINT_TABLES, MaintenanceEditor } from '../windows/MaintenanceEditor'
 import { HelpWindow } from '../windows/HelpWindow'
+import { Receivables } from '../windows/Receivables'
+import { PrinterSetup } from '../windows/PrinterSetup'
 import { CommandPalette } from './CommandPalette'
 import { Modal } from './ui'
 import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base' }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
 const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
 const sep = (): MenuItem => ({ label: '', sep: true })
@@ -91,8 +93,8 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   const admin = (items: MenuItem[]) => (me.isAdmin ? items : [])
   const menus: Record<string, MenuItem[]> = {
     File: [{ label: 'Log Out', action: signOut }, { label: 'Close Window', action: () => active && close(active), disabled: !active },
-      ...soon('Change Password', 'User Profiles'), { label: 'Appearance', children: themeItems }],
-    Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, ...soon('Payment'), { label: 'Documents', kind: 'documents' }],
+      { label: 'Printer Setup…', kind: 'printers' }, ...soon('Change Password', 'User Profiles'), { label: 'Appearance', children: themeItems }],
+    Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, { label: 'Payment / Receivables', kind: 'receivables' }, { label: 'Documents', kind: 'documents' }],
     Maintenance: [
       { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, ...soon('Customer Special Pricing', 'Vendor Entry')] },
       { label: 'Miscellaneous', children: [{ label: 'Price Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('price-categories') }, ...soon('Lossage Table', 'Markup Categories', 'Special Cuts Markup'), sep(), { label: 'Salesman/Installer', kind: 'maint', arg: MAINT_TABLES.indexOf('staff') }, ...soon('Advertising Codes'), { label: 'Payment Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('pay-categories') }, { label: 'Status Table', kind: 'maint', arg: MAINT_TABLES.indexOf('statuses') }] },
@@ -118,7 +120,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
     Help: [{ label: 'Knowledge Base', kind: 'help' }, { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
   }
   const run = (i: MenuItem) => { if (i.disabled || i.children) return; setMenu(null); if (i.kind) open(i.kind, i.arg); i.action?.() }
-  const commands = [{ label: 'Flat Glass Quote', kind: 'quote' as Kind }, { label: 'Customer Entry', kind: 'customer' as Kind }, { label: 'Documents', kind: 'documents' as Kind },
+  const commands = [{ label: 'Flat Glass Quote', kind: 'quote' as Kind }, { label: 'Customer Entry', kind: 'customer' as Kind }, { label: 'Payments / Receivables', kind: 'receivables' as Kind }, { label: 'Printer Setup', kind: 'printers' as Kind }, { label: 'Documents', kind: 'documents' as Kind },
     { label: 'Tax Code Entry', kind: 'maint' as Kind, arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Knowledge Base (how to use)', kind: 'help' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : [])]
 
   return (
@@ -141,7 +143,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
               <h3 onClick={() => setCollapsed(c => ({ ...c, q: !c.q }))}>Quick Launch <span>{collapsed.q ? '⌄' : '⌃'}</span></h3>
               {!collapsed.q && <ul>
                 <li><button onClick={() => open('quote')} title="Flat Glass Quote"><i className="ico q" /><span>Flat Glass Quote</span></button></li>
-                <li><button disabled title="Payment (not built yet)"><i className="ico p" /><span>Payment</span></button></li>
+                <li><button onClick={() => open('receivables')} title="Payments and receivables"><i className="ico p" /><span>Payment</span></button></li>
                 <li><button onClick={() => open('customer')} title="Customers"><i className="ico c" /><span>Customers</span></button></li>
                 <li><button onClick={signOut} title="Log Out"><i className="ico l" /><span>Log Out</span></button></li>
               </ul>}
@@ -172,6 +174,8 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'taxcodes' && <TaxCodeEntry />}
                     {w.kind === 'maint' && <MaintenanceEditor table={MAINT_TABLES[w.arg ?? 0]} />}
                     {w.kind === 'help' && <HelpWindow />}
+                    {w.kind === 'receivables' && <Receivables initialCustomer={w.arg} />}
+                    {w.kind === 'printers' && <PrinterSetup />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}
                   </WinIdContext.Provider>
                 </div>

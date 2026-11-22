@@ -106,7 +106,7 @@ export interface DocumentDetail {
   lines: DocumentLine[]; taxes: { code: string; percent: number; amount: number }[]
   installers: { code: string; name: string | null; hours: number | null; amount: number | null }[]
   statuses: { at: string | null; status: string; note: string | null }[]; revisions: { at: string; total: number | null; comment: string | null }[]
-  shopOrMobile: string | null; updatedAt: string; salesPersonId: number | null; editable: boolean
+  shopOrMobile: string | null; updatedAt: string; salesPersonId: number | null; editable: boolean; balance: number; paid: number
 }
 export interface DocumentQuery { type?: string; customerId?: number; q?: string; from?: string; to?: string; includeVoided?: boolean; offset?: number; limit?: number }
 export const searchDocuments = (f: DocumentQuery) => {
@@ -206,3 +206,22 @@ export async function exportDb(attachments: boolean): Promise<Blob> {
 }
 export const importDb = (file: File, mode: 'merge' | 'replace', overwrite: boolean, dryRun: boolean) =>
   call<TransferResult>(`/admin/import?mode=${mode}&overwrite=${overwrite}&dryRun=${dryRun}`, { method: 'POST', body: file })
+
+// Work orders, invoices, credit memos
+export const convertDocument = (id: number, to: 'W' | 'I' | 'C', opts: { lineSeqs?: number[]; force?: boolean } = {}) =>
+  call<{ id: number; number: string; type: string; total: number }>(`/documents/${id}/convert`, { method: 'POST', body: JSON.stringify({ to, ...opts }) })
+export const markPrinted = (id: number) => call<void>(`/documents/${id}/printed`, { method: 'POST' })
+
+// Receivables and payments
+export interface ReceivableCustomer { id: number; number: string; name: string; balance: number; lastActivity: string | null }
+export interface OpenDocument { id: number; type: string; number: string; date: string; poNumber: string | null; voided: boolean; total: number; paid: number; balance: number }
+export interface PaymentRow { id: number; paidAt: string; customerId: number; customerName: string | null; amount: number; type: string; category: string | null; description: string | null; voided: boolean; applied: number }
+export interface Account { customerId: number; number: string; name: string; balance: number; onAccount: number; documents: OpenDocument[]; payments: PaymentRow[] }
+export interface PaymentInput { customerId: number; amount: number; type: 'P' | 'D'; category: string | null; description: string | null; applications: { documentId: number; amount: number }[]; autoApply?: boolean }
+export const getReceivables = (q: string, credit: boolean) => call<ReceivableCustomer[]>(`/receivables?${new URLSearchParams({ q, credit: String(credit) })}`)
+export const getAccount = (customerId: number) => call<Account>(`/customers/${customerId}/account`)
+export const createPayment = (p: PaymentInput) => call<{ id: number; applied: number; onAccount: number }>('/payments', { method: 'POST', body: JSON.stringify(p) })
+export const voidPayment = (id: number) => call<void>(`/payments/${id}/void`, { method: 'POST' })
+
+export interface CompanyInfo { id: number; name: string; address1: string | null; address2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; fax: string | null; email: string | null; invoiceNote: string | null; disclaimer: string | null; useDisclaimer: boolean }
+export const getCompany = () => call<CompanyInfo>('/company')

@@ -31,14 +31,36 @@ Small reference tables share one set of endpoints; reading is open to any signed
 - `GET /documents?type=&customerId=&q=&from=&to=&includeVoided=&limit=&offset=`: newest first. `type` is `Q` quote, `W` work order, `I` invoice, `C` credit memo. `q` matches document number (prefix), PO number (prefix) or customer name (fragment, as printed on the document). `from`/`to` are inclusive document dates (`YYYY-MM-DD`). Voided documents are hidden unless `includeVoided=true`. Max `limit` 100; `hasMore` replaces a total count. Totals are computed only for the returned page.
 - `GET /documents/{id}`: header, customer snapshot as printed (the current customer record may differ), job site, lines, tax lines, installers, status history, revisions and `totals`.
 - **Totals rule:** `total = SUM(line amount) + SUM(tax amount)`; the breakdown (`glass`, `part`, `labor`, `custom`, `taxable`) is by line source. This equals the AR invoice debit on every loaded invoice (see [DB-DESIGN.md](DB-DESIGN.md)); the legacy system's own totals view is not used.
-- **Quotes are editable; other types are read-only for now** (`editable` is true only for an unvoided quote).
+- **Quotes, work orders and invoices are editable; credit memos are fixed once created** (`editable` is true for an unvoided Q, W or I). Detail also returns `balance` (the document's ledger balance) and `paid` (payments and deposits applied).
 - `POST /documents/calculate` `{customerId, priceCategory?, taxGroup?, discountPercent?, lines[]}`: prices a draft and returns priced lines, tax lines, subtotal, tax, total and warnings. Nothing is saved. Lines: `{source: glass|part|labor|custom, qty, partId, thickNum, thickDen, widthIn, heightIn, units, priceLevel, rate, unitPrice, amount, description, taxable}`; everything price-related is optional and filled from the catalog.
-- `POST /documents` creates a **quote** (customer required; number = next in the latest quote's prefix series; printed customer name/address/phones are copied onto it). `PUT /documents/{id}` replaces header and lines (send `updatedAt` as read; 409 if changed; a revision row is added). `POST /documents/{id}/void` voids a quote. Clients never send totals: the server prices every save.
+- `POST /documents` creates a **quote** (customer required; number = next in the latest quote's prefix series; printed customer name/address/phones are copied onto it). `PUT /documents/{id}` replaces header and lines (send `updatedAt` as read; 409 if changed; a revision row is added). `POST /documents/{id}/void` voids any document (409 while payments are applied). Clients never send totals: the server prices every save.
 - `GET /catalog/parts?q=&source=G|P`: parts matching a code or description, with their thicknesses, for pickers.
 - **Pricing rules** (industry basics, in `Documents/PricingEngine.cs`): glass per sq ft = (width + waste) x (height + waste) / 144 where waste comes from the loss table per thickness; piece price = max(area x rate, part minimum); rate = line `rate` > customer special price > the part's price for the document's category (price level 1-4, first non-empty); parts = qty x units x price; labor/custom = typed amounts; document discount % scales every line; tax per tax code of the tax group on taxable lines (labor only when the code taxes labor, non-calculative codes skipped, exempt customers none); half-away-from-zero rounding to cents.
 - The `R` type (2 legacy rows, unclassified) is listed but cannot be filtered with `type=R` meaningfully until its meaning is confirmed.
 
+## Work orders, invoices, credit memos
+- `POST /documents/{id}/convert` `{to: "W"|"I"|"C", lineSeqs?, force?}`:
+  - `Q -> W` creates a work order; `Q -> I` creates an invoice (counter sale); `W -> I` turns the work order **into** the invoice (same row and number, invoice date = today). Work orders, invoices and credit memos share one number series, as in the legacy data. Converting a quote that already has a live work order or invoice is a 409 unless `force`.
+  - `I -> C` creates a credit memo for all lines or the listed `lineSeqs`; amounts and tax are negative (tax scaled to the taxable share credited).
+  - Returns `{id, number, type, total}`.
+- `POST /documents/{id}/printed` stamps the "Printed" time.
+- `GET /company`: the shop's own details for print headers.
+
+## Ledger rules (`Documents/Ledger.cs`)
+The ledger is append-only: a signed amount per row (debit positive, credit negative). Corrections add offsetting rows, never edits.
+- Invoice: purpose 1 debit = total. Editing an invoice posts only the difference. Credit memo: purpose 1 = -total, then a purpose 3 transfer (+total on the credit memo, -total on the invoice, each naming the other).
+- Payment: purpose 4 credit per document applied; deposit (type `D`): purpose 5. Unapplied money is a credit row with no document ("on account").
+- Voiding a document posts reversing rows and is refused while payments are applied; voiding a payment reverses its rows and keeps it listed as voided.
+
+## Receivables and payments
+- `GET /receivables?q=&credit=&limit=`: customers with a balance due (or, with `credit=true`, a credit), largest first.
+- `GET /customers/{id}/account`: balance, on-account amount, open documents (total, paid, owed) and recent payments.
+- `GET /payments?customerId=&limit=`; `POST /payments` `{customerId, amount, type: P|D, category?, description?, paidAt?, applications:[{documentId, amount}], autoApply?}`: `autoApply` pays the oldest invoices first. 400 if more is applied than received; 409 if a document is voided or would be overpaid.
+- `POST /payments/{id}/void`: administrators only.
+
 ## Testing
+`scripts/smoke-workflow.sh` (40 checks) walks quote -> work order -> invoice -> payments -> credit memo -> voids against a running stack and removes everything it creates.
+
 `scripts/smoke-api.sh` runs 41 end-to-end checks against a running stack (auth, rotation, revocation, time zones, customer and document search, totals consistency, injection and wildcard handling).
 
 ## Supplier pricing (admin only)

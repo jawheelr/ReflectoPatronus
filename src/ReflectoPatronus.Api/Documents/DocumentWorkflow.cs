@@ -16,7 +16,17 @@ public record ConvertRequest(string To, int[]? LineSeqs, bool? Force);
 /// </summary>
 public static class DocumentWorkflow
 {
-    public static void Map(RouteGroupBuilder docs) => docs.MapPost("/{id:int}/convert", Convert);
+    public static void Map(RouteGroupBuilder docs)
+    {
+        docs.MapPost("/{id:int}/convert", Convert);
+        // Called when a document is sent to the printer, so "Printed" on the form shows when it last was.
+        docs.MapPost("/{id:int}/printed", async (int id, NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            await using var c = db.CreateCommand("UPDATE document SET printed_at = now() WHERE id = $1");
+            c.Parameters.AddWithValue(id);
+            return await c.ExecuteNonQueryAsync(ct) > 0 ? Results.NoContent() : Results.NotFound();
+        });
+    }
 
     const string HeaderCopy = """
         customer_id, bill_to_customer_id, staff_sales_id, loss_date, discount_pct, shop_or_mobile, addr_is_ship, terms, initials, agent_code,

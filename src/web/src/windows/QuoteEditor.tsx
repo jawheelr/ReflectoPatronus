@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../api'
 import { money } from '../format'
 import { useShell } from '../shell/WindowContext'
-import { Field, Tabs, Toolbar } from '../shell/ui'
+import { Field, Tabs, Toolbar, type Tool } from '../shell/ui'
 import { CustomerLookup } from './CustomerLookup'
 
 type Source = 'glass' | 'part' | 'labor' | 'custom'
@@ -52,8 +52,15 @@ function PartPicker({ source, label, onPick }: { source: 'G' | 'P'; label: strin
   )
 }
 
-export function QuoteEditor({ initial, onSaved, onOpen, onNew }: { initial: api.DocumentDetail | null; onSaved: (id: number) => void; onOpen: () => void; onNew: () => void }) {
+const NOUN: Record<string, string> = { Q: 'quote', W: 'work order', I: 'invoice' }
+
+/** Entry form for quotes, work orders and invoices (same lines and pricing; invoices also post to the ledger on the server). `extraTools` get a guard that asks before discarding unsaved edits. */
+export function QuoteEditor({ initial, onSaved, onOpen, onNew, extraTools }: {
+  initial: api.DocumentDetail | null; onSaved: (id: number) => void; onOpen: () => void; onNew: () => void
+  extraTools?: (guard: (f: () => void) => () => void) => Tool[]
+}) {
   const shell = useShell(), { me } = shell
+  const noun = NOUN[initial?.type ?? 'Q'] ?? 'document'
   const today = useMemo(() => new Date().toLocaleDateString('en-CA', { timeZone: me.companyTimeZone }), [me.companyTimeZone])
   const [customerId, setCustomerId] = useState<number | null>(initial?.customerId ?? null)
   const [customerName, setCustomerName] = useState(initial?.customer.name ?? '')
@@ -101,13 +108,13 @@ export function QuoteEditor({ initial, onSaved, onOpen, onNew }: { initial: api.
     setBusy(true); setError('')
     try {
       const id = initial ? (await api.updateDocument(initial.id, input()), initial.id) : (await api.createDocument(input())).id
-      shell.toast(initial ? 'Quote saved.' : 'Quote created.'); setDirty(false); onSaved(id)
+      shell.toast(initial ? `${noun[0].toUpperCase() + noun.slice(1)} saved.` : 'Quote created.'); setDirty(false); onSaved(id)
     } catch (e) { setError(e instanceof Error ? e.message : 'Save failed.'); shell.toast('Not saved.', 'error') } finally { setBusy(false) }
   }
   async function voidIt() {
-    if (!initial || !window.confirm(`Void quote ${initial.number}? It stays on file, marked VOID, and cannot be edited.`)) return
+    if (!initial || !window.confirm(`Void ${noun} ${initial.number}? It stays on file, marked VOID, and cannot be edited.${initial.type === 'I' ? ' Its amount comes off the customer balance.' : ''}`)) return
     setBusy(true)
-    try { await api.voidDocument(initial.id); shell.toast('Quote voided.'); onSaved(initial.id) } catch (e) { setError(e instanceof Error ? e.message : 'Void failed.') } finally { setBusy(false) }
+    try { await api.voidDocument(initial.id); shell.toast(`${noun[0].toUpperCase() + noun.slice(1)} voided.`); onSaved(initial.id) } catch (e) { setError(e instanceof Error ? e.message : 'Void failed.') } finally { setBusy(false) }
   }
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (dirty && !busy) void save() } }
@@ -122,8 +129,8 @@ export function QuoteEditor({ initial, onSaved, onOpen, onNew }: { initial: api.
       <Toolbar tools={[
         { label: 'Save', icon: 'save', onClick: save, disabled: busy || !dirty, title: dirty ? 'Save (Ctrl+S)' : 'No changes to save' },
         { label: 'Open', icon: 'open', onClick: guard(onOpen), title: 'Open a document' },
-        { label: 'Void', icon: 'delete', onClick: voidIt, disabled: busy || !initial, title: initial ? 'Void this quote' : 'Save the quote first' },
-        { label: 'New', icon: 'clear', onClick: guard(onNew), title: 'Start a new quote' }]} />
+        { label: 'Void', icon: 'delete', onClick: voidIt, disabled: busy || !initial, title: initial ? `Void this ${noun}` : 'Save the quote first' },
+        { label: 'New', icon: 'clear', onClick: guard(onNew), title: 'Start a new quote' }, ...(extraTools?.(guard) ?? [])]} />
       {error && <p className="formerr">{error}</p>}
       <Tabs tabs={['General', 'Insurance', 'Installation', 'Notes']} active={tab} onChange={setTab} />
       <div className="panel">

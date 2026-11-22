@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react'
 import * as api from '../api'
 import { instant, money, plainDate } from '../format'
 import { useShell, useWinId } from '../shell/WindowContext'
-import { Audit, Field, Modal, RO, Tabs, Toolbar } from '../shell/ui'
+import { Audit, Field, Modal, RO, Tabs, Toolbar, type Tool } from '../shell/ui'
+import { PrintDialog } from '../print/PrintDialog'
+import { loadPrefs } from '../print/printers'
+import { kindOf, renderDocument } from '../print/render'
+import { PaymentDialog } from './PaymentDialog'
 import { DocumentBrowser, TYPE_NAMES } from './DocumentBrowser'
 import { QuoteEditor } from './QuoteEditor'
 
 const TYPES = ['Q', 'W', 'I', 'C']
 
-/** The "Quote" window (the same window serves quotes, work orders, invoices and credits via Document Type). Quotes are editable; the rest are read-only for now. */
+/** The "Quote" window: one window for quotes, work orders, invoices and credit memos (Document Type). Quotes, work orders and invoices are editable; credit memos are fixed once created. */
 export function QuoteWindow({ initialId }: { initialId?: number }) {
-  const { me, open, setTitle } = useShell(), winId = useWinId()
+  const { me, open, setTitle, toast } = useShell(), winId = useWinId()
   const [docType, setDocType] = useState('Q')
   const [number, setNumber] = useState('')
   const [d, setD] = useState<api.DocumentDetail | null>(null)
@@ -18,6 +22,8 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
   const [tab, setTab] = useState('General')
   const [lookup, setLookup] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [printing, setPrinting] = useState(false); const [paying, setPaying] = useState(false); const [crediting, setCrediting] = useState(false)
+  const [creditSeqs, setCreditSeqs] = useState<number[]>([]); const [busy, setBusy] = useState(false)
 
   const load = (id: number) => api.getDocument(id).then(x => {
     setD(x); setDocType(x.type); setNumber(x.number); setError(''); setTab('General'); setTitle(winId, `${x.typeName} ${x.number}`)
@@ -34,15 +40,44 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
     if (exact.length === 1) load(exact[0].id); else setLookup(n)
   }
 
-  const editing = docType === 'Q' && (d == null || d.editable)
+  async function convert(to: 'W' | 'I' | 'C', lineSeqs?: number[]) {
+    if (!d) return
+    const what = { W: 'work order', I: 'invoice', C: 'credit memo' }[to]
+    const msg = to === 'I' ? `Turn ${d.typeName.toLowerCase()} ${d.number} into an invoice? It is billed to ${d.customer.name ?? 'the customer'} and the amount is added to their balance.`
+      : to === 'W' ? `Create a work order from quote ${d.number}?` : ''
+    if (msg && !window.confirm(msg)) return
+    setBusy(true); setError('')
+    try {
+      let r
+      try { r = await api.convertDocument(d.id, to, { lineSeqs }) }
+      catch (e) {
+        if (e instanceof api.ApiError && e.status === 409 && /already turned into/.test(e.message) && window.confirm(`${e.message}\n\nCreate another anyway?`)) r = await api.convertDocument(d.id, to, { lineSeqs, force: true })
+        else throw e
+      }
+      toast(`${what[0].toUpperCase() + what.slice(1)} ${r.number} created.`); setCrediting(false)
+      if (r.id === d.id) await load(r.id); else open('quote', r.id)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not convert.') } finally { setBusy(false) }
+  }
+  const tools = (guard: (f: () => void) => () => void): Tool[] => {
+    if (!d) return []
+    const t: Tool[] = [{ label: 'Print', icon: 'print', onClick: guard(() => setPrinting(true)), title: 'Preview and print this document' }]
+    if (d.voided) return t
+    if (d.type === 'Q') t.push({ label: 'Work Order', icon: 'notes', onClick: guard(() => void convert('W')), disabled: busy, title: 'Create a work order from this quote' })
+    if (d.type === 'Q' || d.type === 'W') t.push({ label: 'Invoice', icon: 'notes', onClick: guard(() => void convert('I')), disabled: busy, title: d.type === 'W' ? 'Turn this work order into an invoice' : 'Create an invoice from this quote' })
+    if (d.type === 'I') t.push({ label: 'Credit', icon: 'notes', onClick: guard(() => { setCreditSeqs(d.lines.filter(l => l.amount !== 0).map(l => l.seq)); setCrediting(true) }), disabled: busy, title: 'Credit all or some lines of this invoice' })
+    if ((d.type === 'I' || d.type === 'W') && d.customerId) t.push({ label: 'Payment', icon: 'save', onClick: guard(() => setPaying(true)), title: 'Receive a payment or deposit for this customer' })
+    return t
+  }
+  const prefs = loadPrefs()
+  const editing = d == null ? docType === 'Q' : d.editable
   const status = d?.statuses.at(-1)?.status
   const t = d?.totals
   return (
     <>
       {!editing && <Toolbar tools={[
-        { label: 'Save', icon: 'save' }, { label: 'Print', icon: 'print' }, { label: 'E-mail', icon: 'email' },
+        ...tools(f => f),
         { label: 'Open', icon: 'open', onClick: () => setLookup(''), title: 'Open a document' },
-        { label: 'Delete', icon: 'delete' }, { label: 'Clear', icon: 'clear', onClick: clear, title: 'Clear the form' }]} />}
+        { label: 'Clear', icon: 'clear', onClick: clear, title: 'Clear the form' }]} />}
       <div className="form">
         <div className="doc-id">
           <Field label="Document Type">
@@ -56,9 +91,10 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
             <button className="dots" title="Look up a document" onClick={() => setLookup(number.trim())}>…</button>
           </Field>
           {d?.voided && <span className="badge">VOID</span>}
+          {d && (d.type === 'I' || d.type === 'W' || d.type === 'C') && !d.voided && <span className="muted"> Total {money(d.totals.total)}{d.paid ? ` · ${d.type === 'W' ? 'deposits' : 'paid'} ${money(d.paid)}` : ''}{d.type === 'C' ? ' · applied to the invoice' : d.type === 'I' ? <> · balance due <b>{money(d.balance)}</b></> : ''}</span>}
         </div>
         {error && <p className="error">{error}</p>}
-        {editing ? <QuoteEditor key={d?.id ?? 'new'} initial={d} onSaved={load} onOpen={() => setLookup('')} onNew={clear} /> : <>
+        {editing ? <QuoteEditor key={`${d?.id ?? 'new'}:${d?.type}:${d?.updatedAt}`} initial={d} onSaved={load} onOpen={() => setLookup('')} onNew={clear} extraTools={tools} /> : <>
         <Tabs tabs={['General', 'Insurance', 'Installation', 'Other', 'Notes']} active={tab} onChange={setTab} />
         <div className="panel">
           {tab === 'General' && <div className="general">
@@ -75,6 +111,8 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
             <div className="right">
               <Field label="Doc Date"><RO value={d ? plainDate(d.date) : ''} width="9rem" /></Field>
               <Field label="Printed"><RO value={d ? (d.printedAt ? instant(d.printedAt, me.timeZone) : "N/A") : ""} width="12rem" /></Field>
+              {d && d.type !== 'Q' && <Field label="Paid"><RO value={money(d.paid)} width="9rem" /></Field>}
+              {d && d.type !== 'Q' && <Field label="Doc Balance"><RO value={money(d.balance)} width="9rem" /></Field>}
               <Field label="Cust Balance"><RO value={balance ? money(balance.balance) : ''} width="9rem" /></Field>
               <Field label="Credit Limit"><RO value={balance?.creditLimit != null ? money(balance.creditLimit) : balance ? '$0.00' : ''} width="9rem" /></Field>
               <Field label="Discount"><RO value={d ? `${(d.discountPercent ?? 0).toFixed(2)}%` : ''} width="9rem" /></Field>
@@ -127,6 +165,22 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
         </>}
       </div>
       <Audit createdAt={d ? instant(d.createdAt, me.timeZone) : undefined} />
+      {printing && d && <PrintDialog title={`${d.typeName.toLowerCase()} ${d.number}`} kind={kindOf(d.type)} canHidePrices
+        hidePricesDefault={!!balance?.noPrices || (d.type === 'W' && !prefs.showPricesOnWorkOrder)}
+        build={(hide, company) => renderDocument(d, { company, hidePrices: hide })}
+        onPrinted={() => { void api.markPrinted(d.id).then(() => load(d.id)) }} onClose={() => setPrinting(false)} />}
+      {paying && d?.customerId && <PaymentDialog customerId={d.customerId} customerName={d.customer.name ?? ''} preselect={d.id} onDone={() => load(d.id)} onClose={() => setPaying(false)} />}
+      {crediting && d && (
+        <Modal title={`Credit memo for invoice ${d.number}`} onClose={() => setCrediting(false)} width={720}>
+          <div className="lookup-body">
+            <p>Choose the lines to credit. The credit memo is applied to this invoice, lowering what the customer owes.</p>
+            <table className="grid-table"><thead><tr><th /><th className="num">Qty</th><th>Description</th><th className="num">Amount</th></tr></thead>
+              <tbody>{d.lines.map(l => <tr key={l.seq}><td><input type="checkbox" disabled={l.amount === 0} checked={creditSeqs.includes(l.seq)} onChange={e => setCreditSeqs(c => e.target.checked ? [...c, l.seq] : c.filter(x => x !== l.seq))} /></td>
+                <td className="num">{l.qty}</td><td>{[l.partCode, l.description].filter(Boolean).join(' – ')}</td><td className="num">{money(l.amount)}</td></tr>)}</tbody></table>
+            <p className="muted small">Tax is credited in proportion to the taxable lines you choose.</p>
+            <div className="actions"><button className="primary" disabled={busy || creditSeqs.length === 0} onClick={() => void convert('C', creditSeqs)}>Create credit memo</button><button onClick={() => setCrediting(false)}>Cancel</button></div>
+          </div>
+        </Modal>)}
       {lookup !== null && (
         <Modal title={`Lookup ${TYPE_NAMES[docType]}s`} onClose={() => setLookup(null)} width={820}>
           <div className="lookup-body"><DocumentBrowser fixedType={docType} initialQuery={lookup} onPick={s => { setLookup(null); load(s.id) }} /></div>
