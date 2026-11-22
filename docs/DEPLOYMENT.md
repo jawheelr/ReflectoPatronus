@@ -143,6 +143,13 @@ iPhone/iPad: open the `.p12` (AirDrop/Files), install the profile in Settings, e
 
 **Not built yet:** certificate revocation lists (revoke a device by disabling its session in the API and keeping certificate lifetimes short, `--days`), and a one-time-code enrollment flow (certificates are issued by an administrator with the scripts above). Back up `client-ca.key` offline: it signs every device certificate. **Tested here:** the Caddy gateway against a stand-in backend (no certificate and a certificate from another CA are refused, `X25519MLKEM768` negotiated, spoofed headers overwritten, fingerprint forwarded) and the API's gateway mode and session binding against the real API. **Not tested:** the full `setup.sh` / `rp-setup` run with the gateway on, the LXC gateway service, and real iOS/Windows clients.
 
+## Moving a large database (10 GB and up)
+A browser cannot hold a database that size, so exports and imports run **on the server** as background jobs over files in a transfer folder (`Transfer__Directory`; Docker: the `transfer-data` volume at `/data/transfer`; LXC: `/var/lib/reflectopatronus/transfer`). In the console (Utilities > Import / Export Database) the browser only starts a job, shows its progress, downloads a finished file through its own download manager (HTTP Range, so it resumes) or uploads a file from disk.
+- Export: `.rpb` files are written as `*.partial` and renamed when complete, so an interrupted export never looks finished.
+- Import: reads the file from the folder as one all-or-nothing transaction; Preview runs it and rolls back.
+- The most robust route for the largest files is copying them in and out of the folder directly: `docker cp`, `scp`, or a share.
+- Behind the Synology reverse proxy keep long downloads working by raising its timeouts; through the mTLS gateway nothing extra is needed.
+
 ## Converting between them
 The data lives only in PostgreSQL, so conversion is a dump/restore of one database; schema and config are identical.
 ```bash

@@ -34,7 +34,7 @@ const toDraft = (r: Row): api.DraftLine => ({
   units: num(r.units), priceLevel: null, rate: null, unitPrice: num(r.price), amount: null, description: r.description.trim() || null, taxable: r.taxable,
 })
 
-function PartPicker({ source, label, onPick }: { source: 'G' | 'P'; label: string; onPick: (p: api.CatalogPart) => void }) {
+export function PartPicker({ source, label, onPick }: { source: 'G' | 'P'; label: string; onPick: (p: api.CatalogPart) => void }) {
   const [q, setQ] = useState(label); const [hits, setHits] = useState<api.CatalogPart[]>([]); const [open, setOpen] = useState(false)
   const seq = useRef(0)
   useEffect(() => { setQ(label) }, [label])

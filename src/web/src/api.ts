@@ -197,15 +197,35 @@ export const decideBatch = (id: number, approve: boolean) => call<{ status: stri
 // ---- database export / import (admin only) ----
 export interface TransferTable { table: string; inserted: number; updated: number; skipped: number; deleted: number }
 export interface TransferResult { mode: string; overwrite: boolean; dryRun: boolean; applied: boolean; inserted: number; updated: number; skipped: number; deleted: number; tables: TransferTable[] }
-export async function exportDb(attachments: boolean): Promise<Blob> {
-  const path = `/admin/export?attachments=${attachments}`
-  let r = await raw(path)
-  if (r.status === 401 && await refresh()) r = await raw(path)
-  if (!r.ok) throw await errorOf(r)
-  return r.blob()
+// Database transfer. Big files never pass through the page's memory: the server writes and reads files in its transfer folder as background jobs,
+// the browser downloads finished files with its own download manager (resumable) and uploads from disk.
+export interface TransferFile { name: string; size: number; modified: string }
+export interface TransferFiles { directory: string; freeBytes: number; files: TransferFile[]; partial: { name: string; size: number }[] }
+export interface TransferJob { id: string; kind: 'export' | 'import'; state: 'running' | 'done' | 'error'; message: string | null; file: string | null; bytes: number; total: number; result: TransferResult | null }
+export const getTransferFiles = () => call<TransferFiles>('/admin/transfer/files')
+export const deleteTransferFile = (name: string) => call<void>(`/admin/transfer/files/${encodeURIComponent(name)}`, { method: 'DELETE' })
+export const startExportJob = (attachments: boolean) => call<{ id: string }>('/admin/transfer/export', { method: 'POST', body: JSON.stringify({ attachments }) })
+export const startImportJob = (file: string, mode: 'merge' | 'replace', overwrite: boolean, dryRun: boolean) =>
+  call<{ id: string }>('/admin/transfer/import', { method: 'POST', body: JSON.stringify({ file, mode, overwrite, dryRun }) })
+export const getJob = (id: string) => call<TransferJob>(`/admin/transfer/jobs/${id}`)
+/** Starts a native browser download (straight to disk, resumable for saved files). `file` omitted = a live export. */
+export async function downloadViaBrowser(opts: { file?: string; attachments?: boolean }) {
+  const { url } = await call<{ url: string }>('/admin/transfer/ticket', { method: 'POST', body: JSON.stringify({ file: opts.file ?? null, attachments: opts.attachments ?? false }) })
+  const a = document.createElement('a'); a.href = url; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove()
 }
-export const importDb = (file: File, mode: 'merge' | 'replace', overwrite: boolean, dryRun: boolean) =>
-  call<TransferResult>(`/admin/import?mode=${mode}&overwrite=${overwrite}&dryRun=${dryRun}`, { method: 'POST', body: file })
+/** Streams a file from disk to the server's transfer folder with progress (XMLHttpRequest, because fetch cannot report upload progress). */
+export async function uploadTransferFile(file: File, onProgress: (sent: number, total: number) => void): Promise<void> {
+  await call('/me')   // makes sure the access token is fresh before a long upload
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest()
+    x.open('PUT', `/api/v1/admin/transfer/files/${encodeURIComponent(file.name)}`)
+    if (accessToken) x.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+    x.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded, e.total)
+    x.onload = () => { if (x.status >= 200 && x.status < 300) resolve(); else { let m = `Upload failed (${x.status}).`; try { m = JSON.parse(x.responseText).error ?? m } catch { /* keep */ } reject(new ApiError(x.status, m)) } }
+    x.onerror = () => reject(new ApiError(0, 'The upload was interrupted. Check the connection and try again, or copy the file into the transfer folder on the server instead.'))
+    x.send(file)
+  })
+}
 
 // Work orders, invoices, credit memos
 export const convertDocument = (id: number, to: 'W' | 'I' | 'C', opts: { lineSeqs?: number[]; force?: boolean } = {}) =>
@@ -225,3 +245,45 @@ export const voidPayment = (id: number) => call<void>(`/payments/${id}/void`, { 
 
 export interface CompanyInfo { id: number; name: string; address1: string | null; address2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; fax: string | null; email: string | null; invoiceNote: string | null; disclaimer: string | null; useDisclaimer: boolean }
 export const getCompany = () => call<CompanyInfo>('/company')
+
+// Parts and pricing catalog
+export interface PriceRow { category: string | null; price1: number | null; price2: number | null; price3: number | null; price4: number | null; minPrice: number | null; laborPrice: number | null; minLabor: number | null; taxable: boolean }
+export interface ThickRow { num: number; den: number; markupCategory: string | null; prices: PriceRow[] }
+export interface ItemSummary { id: number; code: string; description: string | null; source: string; thicknesses: number }
+export interface ItemInput { code: string; source: string; description: string | null; uomId: number | null; laborUomId: number | null; notePrinted: string | null; noteInternal: string | null; thicknesses: ThickRow[]; updatedAt: string | null }
+export interface ItemDetail extends ItemInput { id: number; updatedAt: string }
+export const getItems = (q: string, source: 'G' | 'P') => call<ItemSummary[]>(`/catalog/items?${new URLSearchParams({ q, source })}`)
+export const getItem = (id: number) => call<ItemDetail>(`/catalog/items/${id}`)
+export const createItem = (i: ItemInput) => call<{ id: number }>('/catalog/items', { method: 'POST', body: JSON.stringify(i) })
+export const updateItem = (id: number, i: ItemInput) => call<void>(`/catalog/items/${id}`, { method: 'PUT', body: JSON.stringify(i) })
+export const deleteItem = (id: number) => call<void>(`/catalog/items/${id}`, { method: 'DELETE' })
+export const getUoms = () => call<{ id: number; name: string; shortName: string | null }[]>('/catalog/uoms')
+export interface LossRow { thickNum: number; thickDen: number; lossInt: number; lossNum: number; lossDen: number }
+export const getLoss = () => call<LossRow[]>('/catalog/loss')
+export const putLoss = (rows: LossRow[]) => call<void>('/catalog/loss', { method: 'PUT', body: JSON.stringify(rows) })
+export interface SpecialPrice { partId: number; partCode: string; thickNum: number; thickDen: number; priceCategory: string | null; price: number }
+export const getSpecialPrices = (customerId: number) => call<SpecialPrice[]>(`/customers/${customerId}/prices`)
+export const putSpecialPrices = (customerId: number, rows: Omit<SpecialPrice, 'partCode'>[]) => call<void>(`/customers/${customerId}/prices`, { method: 'PUT', body: JSON.stringify(rows) })
+
+// Company, users, utilities
+export const putCompany = (c: CompanyInfo & { timeZone?: string | null }) => call<void>('/company', { method: 'PUT', body: JSON.stringify(c) })
+export interface UserRow { id: number; code: string; name: string | null; active: boolean; isAdmin: boolean; hasPassword: boolean; lockedUntil: string | null; sessions: number }
+export const getUsers = () => call<UserRow[]>('/users')
+export const createUser = (u: { code: string; name: string; password: string; isAdmin: boolean }) => call<{ id: number }>('/users', { method: 'POST', body: JSON.stringify({ ...u, active: true }) })
+export const updateUser = (id: number, u: { name: string | null; active: boolean; isAdmin: boolean }) => call<void>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(u) })
+export const resetUserPassword = (id: number, password: string) => call<void>(`/users/${id}/password`, { method: 'POST', body: JSON.stringify({ password }) })
+export const changeOwnPassword = (current: string, next: string) => call<void>('/me/password', { method: 'POST', body: JSON.stringify({ current, new: next }) })
+export const cleanup = (what: 'delete-quotes' | 'delete-inactive-customers', before: string | null, dryRun: boolean) =>
+  call<{ count: number; deleted: boolean }>(`/utilities/${what}`, { method: 'POST', body: JSON.stringify({ before, dryRun }) })
+export const applyCredits = (customerId: number) => call<{ applied: number }>(`/customers/${customerId}/apply-credits`, { method: 'POST' })
+
+// Reports
+export interface ReportColumn { key: string; label: string; type: 'text' | 'money' | 'date' | 'int' | 'number'; total: boolean }
+export interface ReportDef { id: string; title: string; group: string; params: string[]; columns: ReportColumn[]; note: string | null }
+export interface ReportResult { id: string; title: string; columns: ReportColumn[]; rows: (string | number | null)[][]; truncated: boolean }
+export const getReportDefs = () => call<ReportDef[]>('/reports')
+export const runReport = (id: string, p: { from?: string; to?: string; asOf?: string; customerId?: number | null; type?: string }) => {
+  const q = new URLSearchParams(); if (p.from) q.set('from', p.from); if (p.to) q.set('to', p.to); if (p.asOf) q.set('asOf', p.asOf)
+  if (p.customerId) q.set('customerId', String(p.customerId)); if (p.type) q.set('type', p.type)
+  return call<ReportResult>(`/reports/${id}?${q}`)
+}

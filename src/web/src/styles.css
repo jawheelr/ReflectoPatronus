@@ -170,3 +170,8 @@ tr.sel td { background: var(--sel, rgba(80,120,200,.18)); } tr.void td { opacity
 .printdlg .opts .spacer { flex: 1; } .printdlg > p { padding: 0 .8rem; margin: .4rem 0; }
 .printdlg iframe.preview { width: calc(100% - 1.6rem); margin: 0 .8rem .8rem; height: 60vh; border: 1px solid var(--line); background: #fff; border-radius: 4px; }
 button.primary { background: var(--accent, #2f6fdb); color: #fff; border-color: transparent; }
+.repparams { display: flex; flex-wrap: wrap; gap: .2rem 1.5rem; } table.report { width: auto; min-width: 40rem; } table.report tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
+fieldset.thick { margin: .6rem 0; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 4px; } fieldset.thick legend { font-weight: 600; } fieldset.thick .grid-table input, fieldset.thick .grid-table select { max-width: 100%; }
+.lbl { margin: 0 .5rem 0 1rem; color: var(--muted, #777); } label.upload input { margin-left: .4rem; }
+.maint.wide { grid-template-columns: 17rem minmax(0, 1fr); } .maint-form { min-width: 0; } .maint.wide .maint-form { overflow-x: auto; } .maint.wide textarea.edit { width: 100%; max-width: 34rem; height: 3.2rem; box-sizing: border-box; }
+.maint.wide select { max-width: 11rem; }

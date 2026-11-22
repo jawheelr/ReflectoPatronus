@@ -10,5 +10,6 @@ WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=build --chmod=a+rX /out ./
+RUN mkdir -p /data/transfer && chown $APP_UID /data/transfer   # large database exports/imports (a volume in compose)
 USER $APP_UID
 ENTRYPOINT ["dotnet", "ReflectoPatronus.Api.dll"]

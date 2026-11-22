@@ -47,6 +47,7 @@ Database__ConnectionString=Host=db;Port=5432;Database=$POSTGRES_DB;Username=$APP
 ENV
 chown root:rpapi /etc/reflectopatronus/api.env; chmod 0640 /etc/reflectopatronus/api.env
 
+mkdir -p /var/lib/reflectopatronus/transfer; chown rpapi:rpapi /var/lib/reflectopatronus/transfer; chmod 0750 /var/lib/reflectopatronus/transfer
 cat > /etc/systemd/system/reflectopatronus-api.service <<'UNIT'
 [Unit]
 Description=ReflectoPatronus API
@@ -68,6 +69,7 @@ PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/reflectopatronus/transfer
 
 [Install]
 WantedBy=multi-user.target

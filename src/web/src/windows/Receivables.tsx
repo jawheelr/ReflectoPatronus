@@ -30,12 +30,17 @@ export function Receivables({ initialCustomer }: { initialCustomer?: number }) {
     if (!window.confirm(`Void the ${money(p.amount)} payment? The amount goes back onto the documents it was applied to.`)) return
     try { await api.voidPayment(p.id); toast('Payment voided.'); refresh() } catch (e) { toast(e instanceof Error ? e.message : 'Could not void.', 'error') }
   }
+  async function applyCredit() {
+    if (!acct || !window.confirm(`Use ${acct.name}'s credit against their open invoices, oldest first?`)) return
+    try { const r = await api.applyCredits(acct.customerId); toast(r.applied > 0 ? `${money(r.applied)} of credit applied.` : 'Nothing to apply: no open invoice is waiting for payment.'); refresh() } catch (e) { toast(e instanceof Error ? e.message : 'Could not apply.', 'error') }
+  }
   const today = new Date().toLocaleDateString('en-CA', { timeZone: me.companyTimeZone })
   return (
     <>
       <Toolbar tools={[
         { label: 'Payment', icon: 'save', onClick: () => setPay(true), disabled: !acct, title: acct ? 'Receive a payment from this customer' : 'Choose a customer first' },
         { label: 'Statement', icon: 'print', onClick: () => setPrint(true), disabled: !acct, title: 'Print a statement' },
+        { label: 'Apply credit', icon: 'notes', onClick: applyCredit, disabled: !acct || (acct.onAccount <= 0 && !acct.documents.some(d => d.balance < 0)), title: 'Use money held on account, or an over-credited document, against what this customer owes' },
         { label: 'Customer', icon: 'open', onClick: () => setPick(true), title: 'Find any customer' },
         { label: 'Refresh', icon: 'clear', onClick: refresh }]} />
       {error && <p className="formerr">{error}</p>}

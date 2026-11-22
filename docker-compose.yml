@@ -9,6 +9,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Security__RequirePqcVerification: ${REQUIRE_PQC_VERIFICATION:-false}
       # First run only: creates this user with this password if NO user has a password yet. Remove afterwards.
+      Transfer__Directory: /data/transfer
       Gateway__Mode: ${GATEWAY_MODE:-off}
       Gateway__SharedSecret: ${GATEWAY_SHARED_SECRET:-}
       Bootstrap__AdminUser: ${BOOTSTRAP_ADMIN_USER:-}
@@ -21,6 +22,7 @@ services:
       # Development only. In production, put the API behind the reverse proxy.
       - "127.0.0.1:8080:8080"
     volumes:
+      - transfer-data:/data/transfer
       - ./certs/ca.crt:/run/db-certs/ca.crt:ro
       - ./certs/api-client.crt:/run/db-certs/api-client.crt:ro
       - ./certs/api-client.key:/run/db-certs/api-client.key:ro
@@ -91,4 +93,5 @@ networks:
     internal: true
 
 volumes:
+  transfer-data:   # large database exports/imports run on the server and use this folder (Utilities > Import / Export Database)
   postgres-data:

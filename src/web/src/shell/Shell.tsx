@@ -11,16 +11,21 @@ import { MAINT_TABLES, MaintenanceEditor } from '../windows/MaintenanceEditor'
 import { HelpWindow } from '../windows/HelpWindow'
 import { Receivables } from '../windows/Receivables'
 import { PrinterSetup } from '../windows/PrinterSetup'
+import { CatalogEditor } from '../windows/CatalogEditor'
+import { LossTable, SpecialPricing } from '../windows/PricingWindows'
+import { ChangePassword, Cleanup, CompanyInfo, Users } from '../windows/AdminWindows'
+import { REPORT_MENU, ReportWindow } from '../windows/ReportWindow'
 import { CommandPalette } from './CommandPalette'
 import { Modal } from './ui'
 import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup' }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', cleanup: 'Delete Options', report: 'Report' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
 const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
 const sep = (): MenuItem => ({ label: '', sep: true })
+const rep = (...titles: string[]): MenuItem[] => titles.map(t => ({ label: t, kind: 'report' as Kind, arg: REPORT_MENU.findIndex(r => r.title === t) }))
 const SAVED = 'rp.windows'
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -93,28 +98,28 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   const admin = (items: MenuItem[]) => (me.isAdmin ? items : [])
   const menus: Record<string, MenuItem[]> = {
     File: [{ label: 'Log Out', action: signOut }, { label: 'Close Window', action: () => active && close(active), disabled: !active },
-      { label: 'Printer Setup…', kind: 'printers' }, ...soon('Change Password', 'User Profiles'), { label: 'Appearance', children: themeItems }],
+      { label: 'Printer Setup…', kind: 'printers' }, { label: 'Change Password', kind: 'password' }, { label: 'User Profiles', kind: 'users', disabled: !me.isAdmin }, { label: 'Appearance', children: themeItems }],
     Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, { label: 'Payment / Receivables', kind: 'receivables' }, { label: 'Documents', kind: 'documents' }],
     Maintenance: [
-      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, ...soon('Customer Special Pricing', 'Vendor Entry')] },
-      { label: 'Miscellaneous', children: [{ label: 'Price Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('price-categories') }, ...soon('Lossage Table', 'Markup Categories', 'Special Cuts Markup'), sep(), { label: 'Salesman/Installer', kind: 'maint', arg: MAINT_TABLES.indexOf('staff') }, ...soon('Advertising Codes'), { label: 'Payment Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('pay-categories') }, { label: 'Status Table', kind: 'maint', arg: MAINT_TABLES.indexOf('statuses') }] },
-      { label: 'Parts', children: [...soon('Flat Glass Types', 'Fabrications', 'Flat Glass Parts'), sep(), ...soon('Part Categories', 'Lookup Categories', 'Add-on Parts', 'GL Accts')] },
+      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, { label: 'Customer Special Pricing', kind: 'special' }, ...soon('Vendor Entry')] },
+      { label: 'Miscellaneous', children: [{ label: 'Price Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('price-categories') }, { label: 'Lossage Table', kind: 'loss' }, ...soon('Markup Categories', 'Special Cuts Markup'), sep(), { label: 'Salesman/Installer', kind: 'maint', arg: MAINT_TABLES.indexOf('staff') }, ...soon('Advertising Codes'), { label: 'Payment Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('pay-categories') }, { label: 'Status Table', kind: 'maint', arg: MAINT_TABLES.indexOf('statuses') }] },
+      { label: 'Parts', children: [{ label: 'Flat Glass Types', kind: 'catalog', arg: 0 }, ...soon('Fabrications'), { label: 'Flat Glass Parts', kind: 'catalog', arg: 1 }, sep(), ...soon('Part Categories', 'Lookup Categories', 'Add-on Parts', 'GL Accts')] },
       { label: 'Taxes', children: [{ label: 'Tax Codes Entry', kind: 'maint', arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Tax Groups Entry', kind: 'taxgroups' }] },
     ],
     Utilities: [
-      ...soon('Company Information', 'Enterprise Information', 'Reprint Document'),
-      { label: 'Delete Options', children: soon('Delete Payments', 'Delete Deposits', 'Delete Inactive Customers', 'Delete Quotes', 'Void Invoice', 'Void Work Order', 'Void Credit Invoice', 'Remove Finance Charges') },
-      { label: 'Invoice File', children: soon('Apply Credits', 'Edit Flat Glass Invoice') },
+      { label: 'Company Information', kind: 'company' }, ...soon('Enterprise Information'), { label: 'Reprint Document', kind: 'documents' },
+      { label: 'Delete Options', children: [{ label: 'Delete (void) Payments', kind: 'receivables' }, { label: 'Delete (void) Deposits', kind: 'receivables' }, { label: 'Delete Inactive Customers', kind: 'cleanup', disabled: !me.isAdmin }, { label: 'Delete Quotes', kind: 'cleanup', disabled: !me.isAdmin }, { label: 'Void Invoice', kind: 'documents' }, { label: 'Void Work Order', kind: 'documents' }, { label: 'Void Credit Invoice', kind: 'documents' }, ...soon('Remove Finance Charges')] },
+      { label: 'Invoice File', children: [{ label: 'Apply Credits', kind: 'receivables' }, { label: 'Edit Flat Glass Invoice', kind: 'documents' }] },
       ...admin([{ label: 'Perform Cost Increase / Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }]),
       sep(), { label: 'Settings (time zone, devices)', kind: 'settings' },
     ],
     Reports: [
-      { label: 'Sales', children: soon('Sales Breakdown', 'Sales by Customer Category', 'Sales Detail by Agent', 'Sales by Agent', 'Tax Breakdown', 'Sales by Advertising Code', 'Sales By Ad Code By ZIP', 'Flat Glass Sales by Part Category', 'Invoice Profitability', 'Cost of Goods Sold', 'Gross Sales & Royalties') },
-      { label: 'Receivables', children: soon('Aged Open Invoices', 'Statements', 'List Finance Charges', 'List Payments', 'Payment Breakdown', 'Payments by User') },
-      { label: 'Accounts', children: soon('Print Customer List', 'List Customer Categories', 'Customer Special Pricing List', 'Customer Address Labels', 'Customer History Report', 'Bill-To Sales Detail', 'Vendors') },
-      { label: 'Salesmen/Installers', children: soon('List Salesman', 'List Installers', 'Salesman Totals', 'Installer Totals', 'Labor Productivity', 'Work Order Status') },
-      { label: 'File Listing', children: [...soon('List Part Categories', 'List Add-On Parts'), sep(), ...soon('List Quotes, WO\'s, Invoices', 'Print Work Order Labels', 'Invoice Edit Notes'), sep(),
-        ...soon('List Price Categories', 'List Markup Categories', 'List Advertising Codes'), sep(), ...soon('List Flat Glass Types', 'List Fabrications', 'List Flat Glass Parts'), sep(), ...soon('List Users', 'List Companies')] },
+      { label: 'Sales', children: [...rep('Sales Breakdown', 'Sales by Customer Category', 'Sales Detail by Agent', 'Sales by Agent', 'Tax Breakdown'), ...soon('Sales by Advertising Code', 'Sales By Ad Code By ZIP', 'Flat Glass Sales by Part Category', 'Invoice Profitability', 'Cost of Goods Sold', 'Gross Sales & Royalties')] },
+      { label: 'Receivables', children: [...rep('Aged Open Invoices', 'Statements (open items)', 'List Payments', 'Payment Breakdown', 'Payments by User'), ...soon('List Finance Charges')] },
+      { label: 'Accounts', children: [...rep('Print Customer List', 'List Customer Categories', 'Customer Special Pricing List', 'Customer History Report'), ...soon('Customer Address Labels', 'Bill-To Sales Detail', 'Vendors')] },
+      { label: 'Salesmen/Installers', children: [...rep('List Salesman', 'List Installers', 'Salesman Totals', 'Installer Totals', 'Work Order Status'), ...soon('Labor Productivity')] },
+      { label: 'File Listing', children: [...soon('List Part Categories', 'List Add-On Parts'), sep(), ...rep("List Quotes, WO's, Invoices"), ...soon('Print Work Order Labels', 'Invoice Edit Notes'), sep(),
+        ...rep('List Price Categories'), ...soon('List Markup Categories', 'List Advertising Codes'), sep(), ...rep('List Flat Glass Types'), ...soon('List Fabrications'), ...rep('List Flat Glass Parts'), sep(), ...rep('List Users', 'List Companies')] },
       ...soon('Ordering'),
     ],
     Help: [{ label: 'Knowledge Base', kind: 'help' }, { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
@@ -176,6 +181,14 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'help' && <HelpWindow />}
                     {w.kind === 'receivables' && <Receivables initialCustomer={w.arg} />}
                     {w.kind === 'printers' && <PrinterSetup />}
+                    {w.kind === 'catalog' && <CatalogEditor source={w.arg === 1 ? 'P' : 'G'} />}
+                    {w.kind === 'loss' && <LossTable />}
+                    {w.kind === 'special' && <SpecialPricing initialCustomer={w.arg} />}
+                    {w.kind === 'company' && <CompanyInfo />}
+                    {w.kind === 'password' && <ChangePassword />}
+                    {w.kind === 'users' && <Users />}
+                    {w.kind === 'cleanup' && <Cleanup />}
+                    {w.kind === 'report' && <ReportWindow index={w.arg ?? 0} />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}
                   </WinIdContext.Provider>
                 </div>

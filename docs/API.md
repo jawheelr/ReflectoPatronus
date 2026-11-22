@@ -58,7 +58,26 @@ The ledger is append-only: a signed amount per row (debit positive, credit negat
 - `GET /payments?customerId=&limit=`; `POST /payments` `{customerId, amount, type: P|D, category?, description?, paidAt?, applications:[{documentId, amount}], autoApply?}`: `autoApply` pays the oldest invoices first. 400 if more is applied than received; 409 if a document is voided or would be overpaid.
 - `POST /payments/{id}/void`: administrators only.
 
+## Catalog and pricing
+- `GET /catalog/items?q=&source=G|P`, `GET /catalog/items/{id}` (thicknesses, each with prices per price category: levels 1-4, minimum, labor, minimum labor, taxable), `POST/PUT/DELETE` (administrators). A PUT replaces the part, its thicknesses and prices in one transaction (send `updatedAt` as read, 409 if changed); prices are matched by thickness and category and upserted so supplier price-change history is kept. A part that appears on documents cannot be deleted.
+- `GET /catalog/uoms`; `GET/PUT /catalog/loss` (waste allowance per thickness; PUT replaces the table).
+- `GET/PUT /customers/{id}/prices`: special prices (PUT replaces them; administrators).
+
+## Users, company, utilities (administrators unless noted)
+- `POST /me/password` `{current, new}` (any user; 12+ characters; signs out other devices).
+- `GET/POST /users`, `PUT /users/{id}` `{name, active, isAdmin}`, `POST /users/{id}/password`. You cannot demote or deactivate yourself and one active administrator must remain.
+- `PUT /company`. `POST /utilities/delete-quotes` and `/utilities/delete-inactive-customers` with `{before, dryRun}`.
+- `POST /customers/{id}/apply-credits`: uses on-account money and over-credited documents against open invoices, oldest first.
+
+## Reports
+`GET /reports` lists them (id, group, parameters, columns); `GET /reports/{id}?from=&to=&asOf=&customerId=&type=` returns `{columns, rows}` (max 20,000 rows). Each report is one SQL statement in `Reports/ReportEndpoints.cs`.
+
+## Database transfer (large databases)
+`GET /admin/transfer/files`, `PUT /admin/transfer/files/{name}` (stream an upload), `DELETE`, `POST /admin/transfer/export {attachments}` and `POST /admin/transfer/import {file, mode, overwrite, dryRun}` start background jobs (202 + id), `GET /admin/transfer/jobs/{id}` reports progress. `POST /admin/transfer/ticket {file?, attachments}` returns a short-lived URL the browser can download natively (stored files support Range requests). The older `GET /admin/export` and `POST /admin/import` stream through the request and remain for scripts.
+
 ## Testing
+`scripts/smoke-admin.sh` (74 checks) covers the catalog, special pricing, loss table, users and passwords, company, credits and every report; it removes what it creates.
+
 `scripts/smoke-workflow.sh` (40 checks) walks quote -> work order -> invoice -> payments -> credit memo -> voids against a running stack and removes everything it creates.
 
 `scripts/smoke-api.sh` runs 41 end-to-end checks against a running stack (auth, rotation, revocation, time zones, customer and document search, totals consistency, injection and wildcard handling).

@@ -28,6 +28,7 @@ public static class ReceivableEndpoints
         api.MapGet("/payments", Payments);
         api.MapPost("/payments", Create);
         api.MapPost("/payments/{id:int}/void", Void).RequireAdmin();
+        api.MapPost("/customers/{id:int}/apply-credits", ApplyCredits);
     }
 
     static NpgsqlParameter P(object? v, NpgsqlDbType t) => new() { NpgsqlDbType = t, Value = v ?? DBNull.Value };
@@ -194,5 +195,50 @@ public static class ReceivableEndpoints
         { c.Parameters.AddWithValue(id); c.Parameters.AddWithValue(user.UserId()); await c.ExecuteNonQueryAsync(ct); }
         await tx.CommitAsync(ct);
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Uses a customer's credit against what they owe, oldest invoice first. Credit is money held on account (from payments) or an
+    /// over-credited document (a negative balance, e.g. a credit memo larger than its invoice); the latter moves by a ledger transfer.
+    /// </summary>
+    static async Task<IResult> ApplyCredits(int id, ClaimsPrincipal user, NpgsqlDataSource db, CancellationToken ct)
+    {
+        await using var cn = await db.OpenConnectionAsync(ct);
+        await using var tx = await cn.BeginTransactionAsync(ct);
+        await using (var lk = new NpgsqlCommand("SELECT 1 FROM customer WHERE id = $1 FOR UPDATE", cn, tx)) { lk.Parameters.AddWithValue(id); if (await lk.ExecuteScalarAsync(ct) is null) return Results.NotFound(); }
+        var sources = new List<(int? Payment, int? Doc, short Purpose, decimal Left)>(); var targets = new List<(int Doc, decimal Left)>();
+        await using (var c = new NpgsqlCommand("""
+            SELECT a.payment_id, p.type, -sum(a.amount) FROM ar_entry a JOIN payment p ON p.id = a.payment_id
+            WHERE a.customer_id = $1 AND a.document_id IS NULL GROUP BY a.payment_id, p.type HAVING sum(a.amount) < 0 ORDER BY a.payment_id
+            """, cn, tx))
+        {
+            c.Parameters.AddWithValue(id);
+            await using var r = await c.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) sources.Add((r.GetInt32(0), null, (short)(r.GetString(1).Trim() == "D" ? 5 : 4), r.GetDecimal(2)));
+        }
+        await using (var c = new NpgsqlCommand("""
+            SELECT a.document_id, sum(a.amount) FROM ar_entry a JOIN document d ON d.id = a.document_id
+            WHERE a.customer_id = $1 AND NOT d.voided GROUP BY a.document_id HAVING sum(a.amount) <> 0 ORDER BY min(d.doc_date), a.document_id
+            """, cn, tx))
+        {
+            c.Parameters.AddWithValue(id);
+            await using var r = await c.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) { var b = r.GetDecimal(1); if (b > 0) targets.Add((r.GetInt32(0), b)); else sources.Add((null, r.GetInt32(0), 3, -b)); }
+        }
+        var applied = 0m; var ti = 0; var uid = user.UserId();
+        for (var si = 0; si < sources.Count && ti < targets.Count; si++)
+        {
+            var s = sources[si];
+            while (s.Left > 0 && ti < targets.Count)
+            {
+                var t = targets[ti]; var take = Math.Min(s.Left, t.Left);
+                if (s.Payment is { } pay) { await Ledger.Post(cn, tx, id, null, pay, null, take, s.Purpose, uid, ct); await Ledger.Post(cn, tx, id, t.Doc, pay, null, -take, s.Purpose, uid, ct); }
+                else { await Ledger.Post(cn, tx, id, s.Doc, null, t.Doc, take, 3, uid, ct); await Ledger.Post(cn, tx, id, t.Doc, null, s.Doc, -take, 3, uid, ct); }
+                s.Left -= take; targets[ti] = (t.Doc, t.Left - take); applied += take;
+                if (targets[ti].Left == 0) ti++;
+            }
+        }
+        await tx.CommitAsync(ct);
+        return Results.Ok(new { applied });
     }
 }

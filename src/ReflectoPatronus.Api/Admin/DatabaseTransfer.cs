@@ -108,9 +108,8 @@ public static class DatabaseTransfer
     static readonly HashSet<string> AttachmentTables = ["attachment", "attachment_blob"];
 
     /// <param name="attachments">false leaves out photos/files (the bulk of the database) for a small, fast export.</param>
-    static IResult Export(NpgsqlDataSource db, bool attachments = true) =>
-        Results.Stream(async body =>
-        {
+    internal static async Task WriteExport(Stream body, NpgsqlDataSource db, bool attachments)
+    {
             await using var conn = await db.OpenConnectionAsync();
             await using var tx = await conn.BeginTransactionAsync(IsolationLevel.RepeatableRead);   // one consistent snapshot
             var (all, schema) = await LoadMeta(conn, default);
@@ -132,24 +131,32 @@ public static class DatabaseTransfer
             await w.WriteLineAsync("#end\t" + JsonSerializer.Serialize(counts));
             await w.FlushAsync();
             await gz.DisposeAsync();   // writes the gzip trailer asynchronously (Kestrel forbids synchronous writes)
-        }, "application/gzip", $"reflectopatronus-{DateTime.UtcNow:yyyyMMdd-HHmm}.rpb");
+    }
+
+    static IResult Export(NpgsqlDataSource db, bool attachments = true) =>
+        Results.Stream(body => WriteExport(body, db, attachments), "application/gzip", $"reflectopatronus-{DateTime.UtcNow:yyyyMMdd-HHmm}.rpb");
 
     // ---- import ---------------------------------------------------------------------------------------------------
 
     static async Task<IResult> Import(HttpContext http, NpgsqlDataSource db, string mode = "merge", bool overwrite = false, bool dryRun = false)
     {
+        http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>()!.MaxRequestBodySize = null;
+        return await ImportStream(http.Request.Body, db, mode, overwrite, dryRun, http.RequestAborted);
+    }
+
+    /// <summary>Imports from any stream: the request body, or a file on the server (used for very large databases).</summary>
+    internal static async Task<IResult> ImportStream(Stream input, NpgsqlDataSource db, string mode, bool overwrite, bool dryRun, CancellationToken ct)
+    {
         if (mode is not ("replace" or "merge")) return Results.BadRequest(new { error = "mode must be replace or merge." });
         if (!await OneAtATime.WaitAsync(0)) return Results.Conflict(new { error = "Another import is already running." });
         try
         {
-            http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>()!.MaxRequestBodySize = null;
-            var ct = http.RequestAborted;
             await using var conn = await db.OpenConnectionAsync(ct);
             await using var tx = await conn.BeginTransactionAsync(ct);
             var (metas, schema) = await LoadMeta(conn, ct);
             var byName = metas.ToDictionary(m => m.Name);
 
-            using var gz = new GZipStream(http.Request.Body, CompressionMode.Decompress);
+            using var gz = new GZipStream(input, CompressionMode.Decompress);
             using var rd = new StreamReader(gz, Encoding.UTF8);
             string? line;
             try { line = await rd.ReadLineAsync(ct); } catch (InvalidDataException) { return Bad("That is not a ReflectoPatronus export file."); }

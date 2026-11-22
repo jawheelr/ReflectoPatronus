@@ -67,6 +67,10 @@ TaxEndpoints.Map(api);
 MaintenanceEndpoints.Map(api);
 PricingEndpoints.Map(api);
 DatabaseTransfer.Map(api);
+ReflectoPatronus.Api.Admin.TransferJobs.Map(app, api);
+ReflectoPatronus.Api.Admin.AdminEndpoints.Map(api);
+ReflectoPatronus.Api.Catalog.CatalogEndpoints.Map(api);
+ReflectoPatronus.Api.Reports.ReportEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).
 api.MapGet("/security/status", async (DatabaseProbe db, CancellationToken ct) =>
 {
