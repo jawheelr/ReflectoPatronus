@@ -4,8 +4,8 @@ namespace ReflectoPatronus.Api.Auth;
 
 public static class AdminFilter
 {
-    /// <summary>Restricts a route group to administrators (app_user.is_admin). Everyone else gets 403.</summary>
-    public static RouteGroupBuilder RequireAdmin(this RouteGroupBuilder g) => g.AddEndpointFilter(async (ctx, next) =>
+    /// <summary>Restricts a route group or a single endpoint to administrators (app_user.is_admin). Everyone else gets 403.</summary>
+    public static TBuilder RequireAdmin<TBuilder>(this TBuilder g) where TBuilder : IEndpointConventionBuilder => g.AddEndpointFilter(async (ctx, next) =>
     {
         var db = ctx.HttpContext.RequestServices.GetRequiredService<NpgsqlDataSource>();
         await using var c = db.CreateCommand("SELECT is_admin FROM app_user WHERE id = $1");

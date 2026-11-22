@@ -3,13 +3,23 @@
 **A modern glass shop software.**  
 Developer: Jarred Wheeler
 
-Replacement for the legacy system (flat-glass quoting/invoicing): PostgreSQL 17 + ASP.NET Core API (React and iOS clients planned), runnable on **Docker** or **Proxmox LXC** from the same config.
+Replacement for the legacy system (flat-glass quoting/invoicing): PostgreSQL 17 + ASP.NET Core API and a React web console (a Windows/Tauri and an iOS client are planned), runnable on **Docker** or **Proxmox LXC** from the same config. Remote access can require a device certificate (mTLS) with post-quantum key exchange.
+
+## Screenshots
+Light and dark themes, a built-in knowledge base under **Help**, and editable customers and maintenance tables. (Entries shown are made-up examples.)
+
+| | |
+|---|---|
+| ![Sign in, dark](docs/screenshots/login-dark.png) | ![Sign in, light](docs/screenshots/login-light.png) |
+| **Customer entry** (dark) ![Customer entry, dark](docs/screenshots/customer-entry.png) | **Customer entry** (light) ![Customer entry, light](docs/screenshots/customer-entry-light.png) |
+| **Maintenance tables** ![Price categories editor](docs/screenshots/maintenance-price-categories.png) | **Help > Knowledge Base** ![Knowledge base](docs/screenshots/help-knowledge-base.png) |
+| **Supplier pricing** ![Supplier pricing](docs/screenshots/supplier-pricing.png) | **Import / export** ![Import and export](docs/screenshots/import-export.png) |
 
 | Doc | What |
 |---|---|
 | [docs/LEGACY-SCHEMA.md](docs/LEGACY-SCHEMA.md) | What is inside the legacy system database (structure only) |
 | [docs/DB-DESIGN.md](docs/DB-DESIGN.md) | The PostgreSQL model, what changed from the legacy system and why, open questions |
-| [docs/API.md](docs/API.md) | REST API: per-device auth, time zones, customers; OpenAPI contract |
+| [docs/API.md](docs/API.md) | REST API: per-device auth, time zones, customers, maintenance tables; OpenAPI contract |
 | [docs/IMPORT.md](docs/IMPORT.md) | Running the legacy system importer, guarantees, first dry-run results |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker and LXC setup, converting between them, what is tested |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/STARTER-README.md](docs/STARTER-README.md) | Original scaffold notes (TLS/mTLS/PQC gate) |

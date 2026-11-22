@@ -11,8 +11,16 @@ export interface CustomerDetail extends CustomerSummary {
   contactName: string | null; taxGroup: string | null; taxExempt: boolean; taxId: string | null
   priceCategory: string | null; category: string | null; printStatement: boolean; noPrices: boolean
   creditLimit: number | null; lastTransactionOn: string | null; notePrinted: string | null; noteInternal: string | null
-  phones: CustomerPhone[]
+  phones: CustomerPhone[]; createdAt: string; updatedAt: string
 }
+export interface CustomerInput {
+  number: string; type: string; lastName: string; firstName: string; address1: string; address2: string; city: string; state: string; zip: string
+  email: string; contactName: string; taxGroup: string; taxExempt: boolean; taxId: string; priceCategory: string; category: string
+  printStatement: boolean; noPrices: boolean; creditLimit: number | null; notePrinted: string; noteInternal: string
+  phones: CustomerPhone[]; updatedAt?: string
+}
+export interface CodeName { code: string; description: string | null }
+export interface CustomerLookups { priceCategories: CodeName[]; customerCategories: CodeName[]; taxGroups: CodeName[]; types: string[] }
 export interface Page<T> { items: T[]; limit: number; offset: number; hasMore: boolean }
 
 export class ApiError extends Error {
@@ -78,6 +86,10 @@ export const revokeSession = (id: string) => call<void>(`/me/sessions/${id}`, { 
 export const searchCustomers = (q: string, offset = 0, limit = 25, sort: 'name' | 'code' = 'name') =>
   call<Page<CustomerSummary>>(`/customers?q=${encodeURIComponent(q)}&sort=${sort}&limit=${limit}&offset=${offset}`)
 export const getCustomer = (id: number) => call<CustomerDetail>(`/customers/${id}`)
+export const createCustomer = (c: CustomerInput) => call<{ id: number }>('/customers', { method: 'POST', body: JSON.stringify(c) })
+export const updateCustomer = (id: number, c: CustomerInput) => call<void>(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(c) })
+export const deleteCustomer = (id: number) => call<void>(`/customers/${id}`, { method: 'DELETE' })
+export const getCustomerLookups = () => call<CustomerLookups>('/lookups/customer')
 
 export interface DocumentSummary { id: number; type: string; number: string; date: string; customerId: number | null; customerName: string | null; poNumber: string | null; voided: boolean; total: number }
 export interface DocumentLine { seq: number; parentSeq: number | null; source: string; qty: number | null; partCode: string | null; description: string | null; dims: string | null; shape: string | null; thickness: string | null; unitPrice: number | null; listPrice: number | null; multiplier: number; amount: number; taxable: boolean }
@@ -113,6 +125,20 @@ export interface TaxCode { code: string; description: string | null; percent: nu
 export interface TaxGroup { code: string; description: string | null; codes: { position: number; code: string; description: string | null; percent: number }[] }
 export const getTaxCodes = () => call<TaxCode[]>('/tax-codes')
 export const getTaxGroups = () => call<TaxGroup[]>('/tax-groups')
+export interface TaxGroupInput { code: string; description: string; codes: { position: number; code: string }[] }
+export const createTaxGroup = (g: TaxGroupInput) => call<{ code: string }>('/tax-groups', { method: 'POST', body: JSON.stringify(g) })
+export const updateTaxGroup = (code: string, g: TaxGroupInput) => call<void>(`/tax-groups/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(g) })
+export const deleteTaxGroup = (code: string) => call<void>(`/tax-groups/${encodeURIComponent(code)}`, { method: 'DELETE' })
+
+// Small reference tables (tax codes, categories, salesmen/installers, statuses): one generic editor.
+export interface MaintCol { api: string; db: string; label: string; type: 'Text' | 'Bool' | 'Decimal' | 0 | 1 | 2; required: boolean; max: number; readOnly: boolean }
+export interface MaintTable { key: string; title: string; note: string | null; keyColumn: MaintCol; keyIdentity: boolean; cols: MaintCol[]; protected: boolean }
+export type MaintRow = Record<string, string | number | boolean | null>
+export const getMaintTables = () => call<MaintTable[]>('/maintenance')
+export const getMaintRows = (t: string) => call<MaintRow[]>(`/maintenance/${t}`)
+export const createMaintRow = (t: string, row: MaintRow) => call<{ key: string }>(`/maintenance/${t}`, { method: 'POST', body: JSON.stringify(row) })
+export const updateMaintRow = (t: string, key: string, row: MaintRow) => call<void>(`/maintenance/${t}/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify(row) })
+export const deleteMaintRow = (t: string, key: string) => call<void>(`/maintenance/${t}/${encodeURIComponent(key)}`, { method: 'DELETE' })
 
 // ---- supplier pricing (admin only) ----
 export interface Supplier {

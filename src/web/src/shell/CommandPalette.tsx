@@ -4,7 +4,7 @@ import { money, plainDate } from '../format'
 import { TYPE_NAMES } from '../windows/DocumentBrowser'
 import type { Kind } from './WindowContext'
 
-export interface Command { label: string; kind: Kind }
+export interface Command { label: string; kind: Kind; arg?: number }
 type Hit = { key: string; group: string; title: string; detail?: string; run: () => void }
 
 /** Ctrl/Cmd+K: jump to a customer, a document or a window from anywhere. */
@@ -28,7 +28,7 @@ export function CommandPalette({ commands, open, onClose }: { commands: Command[
   const go = (k: Kind, arg?: number) => () => { onClose(); open(k, arg) }
   const needle = q.trim().toLowerCase()
   const hits: Hit[] = [
-    ...commands.filter(c => !needle || c.label.toLowerCase().includes(needle)).map(c => ({ key: 'c' + c.label, group: 'Go to', title: c.label, run: go(c.kind) })),
+    ...commands.filter(c => !needle || c.label.toLowerCase().includes(needle)).map(c => ({ key: 'c' + c.label, group: 'Go to', title: c.label, run: go(c.kind, c.arg) })),
     ...cust.map(c => ({ key: 'u' + c.id, group: 'Customers', title: [c.lastName, c.firstName].filter(Boolean).join(', ') || '(no name)', detail: `${c.number}${c.city ? ' · ' + c.city : ''} · ${money(c.balance)}`, run: go('customer', c.id) })),
     ...docs.map(d => ({ key: 'd' + d.id, group: 'Documents', title: `${TYPE_NAMES[d.type] ?? d.type} ${d.number}`, detail: `${plainDate(d.date)} · ${d.customerName ?? ''} · ${money(d.total)}`, run: go('quote', d.id) })),
   ]

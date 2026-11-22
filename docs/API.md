@@ -15,7 +15,17 @@ Base path `/api/v1`. The machine-readable contract is [docs/openapi/v1.json](ope
 
 ## Customers
 - `GET /customers?q=&limit=&offset=`: `q` digits-only = account-number/phone prefix, otherwise name fragment (trigram-indexed) or account-number prefix; `%` and `_` are matched literally. Max `limit` 100; `hasMore` replaces a slow total count.
-- `GET /customers/{id}`: full record, phones, balance (sum of the AR ledger).
+- `GET /customers/{id}`: full record, phones, balance (sum of the AR ledger), `createdAt`/`updatedAt`.
+- `POST /customers`: create. Required: `number` (the account code, unique, 20 chars max), `type` (one letter) and a last or first name. Phones are `{slot 1-5, number, ext}`. 201 `{id}`; 409 duplicate code; 400 for invalid values or unknown tax group / price category / category.
+- `PUT /customers/{id}`: replace the record (same body as create, plus `updatedAt` exactly as read). **Optimistic concurrency:** if the record changed since that `updatedAt`, 409 and nothing is written. `created_by`/`updated_by` record the signed-in user. 204 on success.
+- `DELETE /customers/{id}` (administrators only): 204, or 409 when the customer has documents or ledger entries.
+- `GET /lookups/customer`: tax groups, price categories, customer categories and the type letters in use, for drop-downs.
+
+## Maintenance tables and tax groups
+Small reference tables share one set of endpoints; reading is open to any signed-in user, changing is **administrator only**. Only tables registered in the server can be addressed (`GET /maintenance` describes them: columns, labels, types).
+- Tables: `tax-codes`, `customer-categories`, `price-categories`, `pay-categories`, `staff` (salesmen/installers), `statuses`.
+- `GET /maintenance/{table}`, `POST /maintenance/{table}`, `PUT /maintenance/{table}/{key}`, `DELETE /maintenance/{table}/{key}`. A code (key) never changes after creation. 409 when a code already exists or the entry is in use; system statuses cannot be deleted.
+- Tax groups: `POST /tax-groups`, `PUT /tax-groups/{code}`, `DELETE /tax-groups/{code}` with `{code, description, codes:[{position 1-5, code}]}`; administrators only, 409 if a customer, document or the company uses the group.
 
 ## Documents (quotes, work orders, invoices, credits)
 - `GET /documents?type=&customerId=&q=&from=&to=&includeVoided=&limit=&offset=`: newest first. `type` is `Q` quote, `W` work order, `I` invoice, `C` credit memo. `q` matches document number (prefix), PO number (prefix) or customer name (fragment, as printed on the document). `from`/`to` are inclusive document dates (`YYYY-MM-DD`). Voided documents are hidden unless `includeVoided=true`. Max `limit` 100; `hasMore` replaces a total count. Totals are computed only for the returned page.

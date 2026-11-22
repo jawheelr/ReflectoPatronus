@@ -7,13 +7,15 @@ import { DatabaseTransfer } from '../windows/DatabaseTransfer'
 import { SupplierPricing } from '../windows/SupplierPricing'
 import { SettingsWindow } from '../windows/SettingsWindow'
 import { TaxCodeEntry, TaxGroupEntry } from '../windows/TaxWindows'
+import { MAINT_TABLES, MaintenanceEditor } from '../windows/MaintenanceEditor'
+import { HelpWindow } from '../windows/HelpWindow'
 import { CommandPalette } from './CommandPalette'
 import { Modal } from './ui'
 import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database' }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
 const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
 const sep = (): MenuItem => ({ label: '', sep: true })
@@ -92,10 +94,10 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
       ...soon('Change Password', 'User Profiles'), { label: 'Appearance', children: themeItems }],
     Daily: [{ label: 'Flat Glass Quote', kind: 'quote' }, ...soon('Payment'), { label: 'Documents', kind: 'documents' }],
     Maintenance: [
-      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, ...soon('Customer Categories', 'Customer Special Pricing', 'Vendor Entry')] },
-      { label: 'Miscellaneous', children: [...soon('Price Categories', 'Lossage Table', 'Markup Categories', 'Special Cuts Markup'), sep(), ...soon('Salesman/Installer', 'Advertising Codes', 'Payment Categories', 'Status Table')] },
+      { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer' }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, ...soon('Customer Special Pricing', 'Vendor Entry')] },
+      { label: 'Miscellaneous', children: [{ label: 'Price Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('price-categories') }, ...soon('Lossage Table', 'Markup Categories', 'Special Cuts Markup'), sep(), { label: 'Salesman/Installer', kind: 'maint', arg: MAINT_TABLES.indexOf('staff') }, ...soon('Advertising Codes'), { label: 'Payment Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('pay-categories') }, { label: 'Status Table', kind: 'maint', arg: MAINT_TABLES.indexOf('statuses') }] },
       { label: 'Parts', children: [...soon('Flat Glass Types', 'Fabrications', 'Flat Glass Parts'), sep(), ...soon('Part Categories', 'Lookup Categories', 'Add-on Parts', 'GL Accts')] },
-      { label: 'Taxes', children: [{ label: 'Tax Codes Entry', kind: 'taxcodes' }, { label: 'Tax Groups Entry', kind: 'taxgroups' }] },
+      { label: 'Taxes', children: [{ label: 'Tax Codes Entry', kind: 'maint', arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Tax Groups Entry', kind: 'taxgroups' }] },
     ],
     Utilities: [
       ...soon('Company Information', 'Enterprise Information', 'Reprint Document'),
@@ -113,11 +115,11 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
         ...soon('List Price Categories', 'List Markup Categories', 'List Advertising Codes'), sep(), ...soon('List Flat Glass Types', 'List Fabrications', 'List Flat Glass Parts'), sep(), ...soon('List Users', 'List Companies')] },
       ...soon('Ordering'),
     ],
-    Help: [...soon('Online Help'), { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
+    Help: [{ label: 'Knowledge Base', kind: 'help' }, { label: 'About ReflectoPatronus', action: () => setAbout(true) }],
   }
   const run = (i: MenuItem) => { if (i.disabled || i.children) return; setMenu(null); if (i.kind) open(i.kind, i.arg); i.action?.() }
   const commands = [{ label: 'Flat Glass Quote', kind: 'quote' as Kind }, { label: 'Customer Entry', kind: 'customer' as Kind }, { label: 'Documents', kind: 'documents' as Kind },
-    { label: 'Tax Code Entry', kind: 'taxcodes' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : [])]
+    { label: 'Tax Code Entry', kind: 'maint' as Kind, arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Knowledge Base (how to use)', kind: 'help' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : [])]
 
   return (
     <ShellContext.Provider value={{ me, open, close, setTitle, refreshMe, toast }}>
@@ -168,6 +170,8 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'pricing' && <SupplierPricing />}
                     {w.kind === 'transfer' && <DatabaseTransfer />}
                     {w.kind === 'taxcodes' && <TaxCodeEntry />}
+                    {w.kind === 'maint' && <MaintenanceEditor table={MAINT_TABLES[w.arg ?? 0]} />}
+                    {w.kind === 'help' && <HelpWindow />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}
                   </WinIdContext.Provider>
                 </div>
@@ -177,7 +181,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
         </div>
         <footer className="statusbar"><span>{me.code}</span><span>{me.timeZone}</span><span className="spacer" /><span>Ver. 0.1.0</span></footer>
         {palette && <CommandPalette commands={commands} open={open} onClose={() => setPalette(false)} />}
-        {about && <Modal title="About" onClose={() => setAbout(false)} width={420}><div className="lookup-body"><p><strong>ReflectoPatronus</strong> 0.1.0</p><p>A modern glass shop software, replacing the legacy system and running on PostgreSQL.</p><p>Developer: Jarred Wheeler</p><p className="muted">Customers, documents and tax setup are read-only for now.</p></div></Modal>}
+        {about && <Modal title="About" onClose={() => setAbout(false)} width={420}><div className="lookup-body"><p><strong>ReflectoPatronus</strong> 0.1.0</p><p>A modern glass shop software, replacing the legacy system and running on PostgreSQL.</p><p>Developer: Jarred Wheeler</p><p className="muted">Documents, quotes and payments are read-only for now; customers and the maintenance tables are editable.</p></div></Modal>}
         <div className="toasts" role="status" aria-live="polite">{toasts.map(t => <div key={t.id} className={'toast ' + t.kind}>{t.message}</div>)}</div>
       </div>
     </ShellContext.Provider>

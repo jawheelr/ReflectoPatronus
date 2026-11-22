@@ -77,6 +77,15 @@ tr.voided td { color: #8a929c; text-decoration: line-through; }
 
 .login { max-width: 22rem; margin: 6rem auto; display: grid; gap: .8rem; background: var(--panel); padding: 1.75rem; border-radius: 8px; box-shadow: 0 6px 24px rgba(20,30,50,.12); }
 .login-logo { width: 100%; margin-bottom: .5rem; }
+.login label { display: grid; gap: .3rem; color: var(--muted); font-size: .9rem; }
+.login input { width: 100%; box-sizing: border-box; padding: .5rem .6rem; color: var(--ink); font-size: 1rem; }
+.login button.primary { padding: .55rem; font-size: 1rem; margin-top: .25rem; }
+.login .error { margin: 0; }
+.field input:not([type=checkbox]):not(.ro), .field select, .field textarea { min-width: 0; }
+.field select { padding: .3rem .4rem; } textarea.edit { min-height: 7rem; width: 100%; resize: vertical; }
+.formerr { color: #b00020; margin: .4rem 0; } .dirty { color: #b26a00; font-size: .85rem; margin-left: .5rem; }
+input.bad, select.bad { border-color: #b00020; }
+
 
 /* ---- fluidity: motion, loading, palette, toasts ---- */
 @media (prefers-reduced-motion: no-preference) {
@@ -133,3 +142,14 @@ kbd { font: inherit; font-size: .75rem; padding: .05rem .4rem; border: 1px solid
 .radios { border: 1px solid var(--line); border-radius: 6px; padding: .5rem .8rem; display: grid; gap: .4rem; }
 .radios .indent { margin-left: 1.6rem; }
 .error { color: #c0392b; }
+.maint { display: grid; grid-template-columns: minmax(15rem, 1fr) minmax(22rem, 1.3fr); gap: 1rem; align-items: start; }
+.maint-list { max-height: 26rem; overflow: auto; border: 1px solid var(--line); border-radius: 4px; } .maint-list .grid-table { margin: 0; }
+.maint fieldset { margin: 0; } .maint fieldset:disabled { opacity: .7; } .maint .search { margin-bottom: .4rem; width: 100%; box-sizing: border-box; }
+@media (max-width: 760px) { .maint { grid-template-columns: 1fr; } }
+.kb { display: grid; grid-template-columns: 17rem 1fr; gap: 1.25rem; padding-top: .5rem; min-height: 28rem; }
+.kb nav { border-right: 1px solid var(--line); padding-right: 1rem; max-height: 34rem; overflow: auto; } .kb .search { width: 100%; box-sizing: border-box; margin-bottom: .5rem; }
+.kb h5 { margin: .8rem 0 .2rem; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; } .kb nav ul { list-style: none; margin: 0; padding: 0; }
+.kb nav button { width: 100%; text-align: left; border: 0; background: none; padding: .3rem .5rem; border-radius: 4px; color: var(--ink); } .kb nav button.on { background: var(--hover); font-weight: 600; }
+.kb article { max-width: 46rem; line-height: 1.55; max-height: 34rem; overflow: auto; padding-right: .5rem; } .kb article h3 { margin-top: 0; } .kb article h4 { margin: 1.1rem 0 .3rem; }
+.kb article li { margin: .2rem 0; }
+@media (max-width: 760px) { .kb { grid-template-columns: 1fr; } .kb nav { border-right: 0; max-height: 14rem; } }
