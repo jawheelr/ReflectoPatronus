@@ -112,9 +112,16 @@ do_apply() {
   docker image prune -f >/dev/null 2>&1
   jq -c '.staged=null' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"
   S done done 100 "Updated to ${target:0:7}."
-  if grep -qE '^(docker/updater/|docker-compose\.yml)' <<<"$files"; then   # the updater itself changed: replace it last
-    ( sleep 5; dc up -d --build updater >/dev/null 2>&1 ) >/dev/null 2>&1 &
-  fi
+  if grep -qE '^(docker/updater/|docker-compose\.yml)' <<<"$files"; then self_replace; fi
+}
+
+# The updater cannot recreate itself (compose would stop this very process before it finished). A short-lived helper container
+# built from this same image does it instead, then exits; the new updater takes over.
+self_replace() {
+  local me; me="$(docker inspect -f '{{.Image}}' "$(hostname)" 2>/dev/null)"; [[ -n "$me" ]] || return 0
+  docker rm -f rp-updater-swap >/dev/null 2>&1
+  docker run -d --rm --name rp-updater-swap -v /var/run/docker.sock:/var/run/docker.sock -v "$P:$P" -w "$P" --entrypoint bash "$me" \
+    -c "sleep 4; git config --global --add safe.directory '*'; docker compose --project-directory '$P' --env-file '$P/.env' ${FILES[*]} up -d --build updater" >/dev/null 2>&1
 }
 
 echo "updater: watching $D for requests (project $P, branch $BRANCH)"
