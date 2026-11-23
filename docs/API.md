@@ -70,7 +70,7 @@ Access is role-based: a **group** is a set of permissions, a user is in any numb
 - Per type checks happen inside the handler: editing a document needs that type's write permission, converting needs the target type's (`W` workorders, `I` invoices, `C` credits).
 
 ## Updates
-`GET /updates` (current commit, newest commit on the tracked branch, whether you are behind, how to update), `POST /updates/check`, `POST /updates/dismiss` (`users.manage`). A background service checks GitHub once a week (`Updates__IntervalDays`, `Updates__Repository`, `Updates__Branch`, `Updates__Enabled=false` to disable); only the repository name is sent, with a generic user agent. The running commit comes from `RP_BUILD_SHA` (Docker `GIT_SHA` build arg) or `/opt/reflectopatronus/COMMIT` (LXC).
+`GET /updates` (current commit, newest commit on the tracked branch, whether you are behind, whether an updater is present and the update is already downloaded, how to update), `POST /updates/check` (also asks the updater to download a newer commit), `POST /updates/apply` `{backup}` (asks the updater to install it; 202 with the progress page URL, 409 if no updater, nothing newer, or one already running), `POST /updates/dismiss` (`users.manage`). Anonymous, because they must survive the restart: `GET /update-status` (progress of the current or last job) and the page `GET /update-progress`. A background service checks GitHub once a week (`Updates__IntervalDays`, `Updates__Repository`, `Updates__Branch`, `Updates__Enabled=false` to disable); only the repository name is sent, with a generic user agent. The running commit comes from `RP_BUILD_SHA` (Docker `GIT_SHA` build arg) or `/opt/reflectopatronus/COMMIT` (LXC).
 
 ## Users, company, utilities
 - `POST /me/password` `{current, new}` (any user; 12+ characters; signs out other devices).
@@ -121,3 +121,6 @@ Each ingest returns `{added, changed, unchanged, batchId, priceChanges}`. A newe
 - All-or-nothing: one transaction; a damaged, truncated or wrong-version file changes nothing. The file's table structure must match the server's (same release, migrations applied).
 - Never exported or overwritten: sessions, password hashes, admin flags, lockout state, supplier feed credentials. Users are only added (without a password), never changed or deleted; a file whose user ids mean different people than on this server is refused.
 - Records are matched by their primary key (the original IDs are preserved by the importer, so a file from this server or from the legacy import lines up).
+
+## Company logo
+`GET /company/logo` (any signed-in user; 404 if none), `PUT /company/logo` with the image as the body and its `Content-Type` (png, jpeg, webp or svg; max 1 MB), `DELETE /company/logo` (`company.write`). `GET /company` returns `hasLogo`. The logo is part of database export/import. The print dialog uses it as the watermark (the company name when there is no logo).

@@ -35,8 +35,7 @@ public static class CompanyEndpoints
             if (ms.Length == 0) return Results.BadRequest(new { error = "No image was sent." });
             await using var c = db.CreateCommand("UPDATE company SET logo = $1, logo_type = $2 WHERE id = (SELECT id FROM company ORDER BY id LIMIT 1)");
             c.Parameters.AddWithValue(ms.ToArray()); c.Parameters.AddWithValue(type);
-            await c.ExecuteNonQueryAsync(ct);
-            return Results.NoContent();
+            return await c.ExecuteNonQueryAsync(ct) == 0 ? Results.NotFound(new { error = "Enter the company details first, then add the logo." }) : Results.NoContent();
         });
         api.MapDelete("/company/logo", async (NpgsqlDataSource db, HttpContext ctx, CancellationToken ct) =>
         {
