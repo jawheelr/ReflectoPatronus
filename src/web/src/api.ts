@@ -37,7 +37,7 @@ export const hasStoredSession = () => sessionStorage.getItem(RT) !== null
 
 async function raw(path: string, init: RequestInit = {}, auth = true): Promise<Response> {
   const headers = new Headers(init.headers)
-  if (init.body) headers.set('Content-Type', 'application/json')
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (auth && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   return fetch(`/api/v1${path}`, { ...init, headers })
 }
@@ -245,8 +245,23 @@ export const getAccount = (customerId: number) => call<Account>(`/customers/${cu
 export const createPayment = (p: PaymentInput) => call<{ id: number; applied: number; onAccount: number }>('/payments', { method: 'POST', body: JSON.stringify(p) })
 export const voidPayment = (id: number) => call<void>(`/payments/${id}/void`, { method: 'POST' })
 
-export interface CompanyInfo { id: number; name: string; address1: string | null; address2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; fax: string | null; email: string | null; invoiceNote: string | null; disclaimer: string | null; useDisclaimer: boolean }
+export interface CompanyInfo { id: number; name: string; address1: string | null; address2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; fax: string | null; email: string | null; invoiceNote: string | null; disclaimer: string | null; useDisclaimer: boolean; hasLogo?: boolean }
 export const getCompany = () => call<CompanyInfo>('/company')
+
+/** The company logo as a data: URL (so printed pages and the print preview need no sign-in), or null when none is set. */
+export async function getLogoDataUrl(): Promise<string | null> {
+  let r = await raw('/company/logo')
+  if (r.status === 401 && await refresh()) r = await raw('/company/logo')
+  if (!r.ok) return null
+  const blob = await r.blob()
+  return new Promise(res => { const f = new FileReader(); f.onload = () => res(f.result as string); f.onerror = () => res(null); f.readAsDataURL(blob) })
+}
+export async function putLogo(file: File) {
+  const send = () => raw('/company/logo', { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+  let r = await send(); if (r.status === 401 && await refresh()) r = await send()
+  if (!r.ok) throw await errorOf(r)
+}
+export const deleteLogo = () => call<void>('/company/logo', { method: 'DELETE' })
 
 // Parts and pricing catalog
 export interface PriceRow { category: string | null; price1: number | null; price2: number | null; price3: number | null; price4: number | null; minPrice: number | null; laborPrice: number | null; minLabor: number | null; taxable: boolean }
@@ -301,7 +316,9 @@ export const deleteGroup = (id: number) => call<void>(`/groups/${id}`, { method:
 
 // Updates (administrators)
 export interface UpdateStatus { mode: 'docker' | 'lxc' | 'other'; current: string | null; currentShort: string | null; latest: string | null; latestShort: string | null; latestMessage: string | null; latestDate: string | null; latestUrl: string | null
-  available: boolean; canCompare: boolean; commitsBehind: number | null; checkedAt: string | null; error: string | null; dismissed: boolean; enabled: boolean; repository: string; branch: string; commands: string[] }
+  available: boolean; canCompare: boolean; commitsBehind: number | null; checkedAt: string | null; error: string | null; dismissed: boolean; enabled: boolean; repository: string; branch: string; commands: string[]
+  updaterPresent: boolean; staged: { sha: string; short: string; message: string | null; commits: string[]; at: number } | null; ready: boolean; jobState: string | null; jobVersion: string | null }
 export const getUpdateStatus = () => call<UpdateStatus>('/updates')
 export const checkForUpdates = () => call<UpdateStatus>('/updates/check', { method: 'POST' })
+export const applyUpdate = (backup: boolean) => call<{ progressUrl: string }>('/updates/apply', { method: 'POST', body: JSON.stringify({ backup }) })
 export const dismissUpdate = () => call<void>('/updates/dismiss', { method: 'POST' })

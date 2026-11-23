@@ -79,6 +79,7 @@ DatabaseTransfer.Map(api);
 ReflectoPatronus.Api.Admin.TransferJobs.Map(app, api);
 ReflectoPatronus.Api.Admin.AdminEndpoints.Map(api);
 ReflectoPatronus.Api.Updates.UpdateEndpoints.Map(api);
+ReflectoPatronus.Api.Updates.UpdateEndpoints.MapPublic(app);
 ReflectoPatronus.Api.Catalog.CatalogEndpoints.Map(api);
 ReflectoPatronus.Api.Reports.ReportEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).

@@ -34,9 +34,10 @@ export function PrinterSetup() {
     if (on) defaults[k] = p.id; else if (defaults[k] === p.id) delete defaults[k]
     commit({ ...prefs, defaults })
   }
-  const test = () => {
+  const test = async () => {
     const { w, h } = pageSize(p)
-    void printHtml(pageHtml(renderTestPage(p.name, `${p.paper === 'custom' ? 'Custom' : PAPERS[p.paper].label} · ${w} × ${h} in${p.landscape ? ' (landscape)' : ''} · margins ${p.margin} in · scale ${p.scale}% · ${p.copies} cop${p.copies === 1 ? 'y' : 'ies'}`, company), p, 'Test page', prefs.watermark ? company?.name : null))
+    const logo = prefs.watermark ? await api.getLogoDataUrl().catch(() => null) : null
+    void printHtml(pageHtml(renderTestPage(p.name, `${p.paper === 'custom' ? 'Custom' : PAPERS[p.paper].label} · ${w} × ${h} in${p.landscape ? ' (landscape)' : ''} · margins ${p.margin} in · scale ${p.scale}% · ${p.copies} cop${p.copies === 1 ? 'y' : 'ies'}`, company), p, 'Test page', prefs.watermark ? (logo ? { logo } : company?.name) : null))
   }
   const num = (v: string, min: number, max: number, d: number) => Math.min(max, Math.max(min, Number.isFinite(Number(v)) && v !== '' ? Number(v) : d))
 
@@ -61,7 +62,7 @@ export function PrinterSetup() {
           {DOC_KINDS.map(k => <label key={k.kind} className="chk"><input type="checkbox" checked={usedFor(k.kind)} onChange={e => setUse(k.kind, e.target.checked)} /> {k.label}</label>)}
           <p className="muted small">Anything not assigned goes to the first printer in the list.</p>
         </fieldset>
-        <label className="chk"><input type="checkbox" checked={prefs.watermark} onChange={e => commit({ ...prefs, watermark: e.target.checked })} /> Print the company name as a faint watermark on every page (can also be switched per print)</label>
+        <label className="chk"><input type="checkbox" checked={prefs.watermark} onChange={e => commit({ ...prefs, watermark: e.target.checked })} /> Print the company logo (or the company name when no logo is set) as a faint watermark on every page (can also be switched per print)</label>
         <label className="chk"><input type="checkbox" checked={prefs.showPricesOnWorkOrder} onChange={e => commit({ ...prefs, showPricesOnWorkOrder: e.target.checked })} /> Show prices on printed work orders (off = shop copy without prices)</label>
         <div className="actions"><button onClick={test}>Print test page…</button><button onClick={remove}>Remove this printer</button></div>
       </div>

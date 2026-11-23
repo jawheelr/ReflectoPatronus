@@ -12,6 +12,9 @@ while [[ $# -gt 0 ]]; do case "$1" in
 ask() { [[ $ASSUME -eq 1 ]] && return 0; local a; read -r -p "$1 [y/N] " a; [[ "$a" =~ ^[Yy] ]]; }
 [[ -f .env ]] || { echo "No .env here. This does not look like a set-up install (run scripts/setup.sh first)."; exit 1; }
 [[ -d .git ]] || { echo "This folder is not a git checkout, so there is nothing to pull. Clone the repository, or copy .env and certs/ into a clone."; exit 1; }
+# Make sure one-click updates (the 'updater' service) are switched on for next time.
+grep -q '^RP_PROJECT_DIR=' .env || { printf '\nRP_PROJECT_DIR=%s\n' "$ROOT" >> .env; }
+[[ $IMAGES -eq 1 ]] && ! grep -q '^RP_IMAGES=' .env && printf 'RP_IMAGES=1\n' >> .env
 COMPOSE=(docker compose --env-file .env); [[ $IMAGES -eq 1 ]] && COMPOSE=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.ghcr.yml)
 
 git fetch -q origin "$BRANCH"
@@ -38,7 +41,7 @@ echo "Applying database changes…"
 for _ in $(seq 1 60); do [[ "$(docker inspect --format '{{.State.Health.Status}}' "$("${COMPOSE[@]}" ps -q db)" 2>/dev/null)" == healthy ]] && break; sleep 2; done
 ./scripts/migrate.sh docker
 echo "Restarting the program…"
-if [[ $IMAGES -eq 1 ]]; then "${COMPOSE[@]}" up -d; else "${COMPOSE[@]}" up -d --build; fi
+if [[ $IMAGES -eq 1 ]]; then "${COMPOSE[@]}" up -d; else "${COMPOSE[@]}" up -d --build; fi   # includes the updater service
 api="$("${COMPOSE[@]}" ps -q api)"
 for _ in $(seq 1 60); do s="$(docker inspect --format '{{.State.Health.Status}}' "$api" 2>/dev/null || true)"; [[ "$s" == healthy ]] && { echo "Updated to ${GIT_SHA:0:7} and healthy."; exit 0; }; sleep 2; done
 echo "The program did not report healthy within two minutes. Check: docker compose logs api"; exit 1

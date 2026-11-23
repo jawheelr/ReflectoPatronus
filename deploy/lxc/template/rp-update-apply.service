@@ -1,0 +1,9 @@
+[Unit]
+Description=Install or download a ReflectoPatronus update requested from the console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=3h
+ExecStart=/usr/local/sbin/rp-update --from-request

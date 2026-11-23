@@ -23,7 +23,7 @@ ARG GIT_SHA=unknown
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       systemd systemd-sysv dbus ifupdown iproute2 iputils-ping procps ca-certificates curl gnupg sudo locales openssl \
-      libicu72 libssl3 zlib1g \
+      libicu72 libssl3 zlib1g jq \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
  && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
  && mkdir -p /etc/postgresql-common && echo "create_main_cluster = false" > /etc/postgresql-common/createcluster.conf \
@@ -53,7 +53,9 @@ RUN install -m 0755 /opt/reflectopatronus/bundle/deploy/lxc/rp-setup.sh /usr/loc
  && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-check.service /etc/systemd/system/rp-update-check.service \
  && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-check.timer /etc/systemd/system/rp-update-check.timer \
  && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-motd.sh /etc/profile.d/rp-update-motd.sh \
- && systemctl enable rp-update-check.timer \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-request.path /etc/systemd/system/rp-update-request.path \
+ && install -m 0644 /opt/reflectopatronus/bundle/deploy/lxc/template/rp-update-apply.service /etc/systemd/system/rp-update-apply.service \
+ && systemctl enable rp-update-check.timer rp-update-request.path \
  && echo "$GIT_SHA" > /opt/reflectopatronus/COMMIT \
  && echo "$RP_VERSION" > /opt/reflectopatronus/VERSION && touch /opt/reflectopatronus/.preinstalled \
  && find /opt/reflectopatronus -name '._*' -delete

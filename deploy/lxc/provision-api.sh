@@ -38,6 +38,7 @@ if [[ -n ${GATEWAY_SHARED_SECRET:-} ]]; then API_BIND=127.0.0.1; GW_ON=true; fi
 cat > /etc/reflectopatronus/api.env <<ENV
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://$API_BIND:8080
+Updates__Directory=/var/lib/reflectopatronus/update
 Security__RequirePqcVerification=${REQUIRE_PQC_VERIFICATION:-false}
 ${GATEWAY_SHARED_SECRET:+Gateway__Mode=require
 Gateway__SharedSecret=$GATEWAY_SHARED_SECRET}
@@ -48,6 +49,7 @@ ENV
 chown root:rpapi /etc/reflectopatronus/api.env; chmod 0640 /etc/reflectopatronus/api.env
 
 mkdir -p /var/lib/reflectopatronus/transfer; chown rpapi:rpapi /var/lib/reflectopatronus/transfer; chmod 0750 /var/lib/reflectopatronus/transfer
+mkdir -p /var/lib/reflectopatronus/update; chmod 0777 /var/lib/reflectopatronus/update; echo lxc > /var/lib/reflectopatronus/update/updater-lxc   # hand-off folder for console-triggered updates (rp-update --from-request)
 cat > /etc/systemd/system/reflectopatronus-api.service <<'UNIT'
 [Unit]
 Description=ReflectoPatronus API
@@ -69,7 +71,7 @@ PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-ReadWritePaths=/var/lib/reflectopatronus/transfer
+ReadWritePaths=/var/lib/reflectopatronus/transfer /var/lib/reflectopatronus/update
 
 [Install]
 WantedBy=multi-user.target

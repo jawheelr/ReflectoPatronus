@@ -12,6 +12,6 @@ ARG GIT_SHA=unknown
 ENV ASPNETCORE_URLS=http://+:8080 RP_BUILD_SHA=$GIT_SHA RP_DEPLOY=docker
 EXPOSE 8080
 COPY --from=build --chmod=a+rX /out ./
-RUN mkdir -p /data/transfer && chown $APP_UID /data/transfer   # large database exports/imports (a volume in compose)
+RUN mkdir -p /data/transfer /data/update && chown $APP_UID /data/transfer /data/update   # large database exports/imports (a volume in compose)
 USER $APP_UID
 ENTRYPOINT ["dotnet", "ReflectoPatronus.Api.dll"]

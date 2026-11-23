@@ -23,7 +23,7 @@ OLD_EXTRA=""
 if [[ -f $ENVF ]]; then
   echo "Found $ENVF: reusing the values in it."
   set -a; source "$ENVF"; set +a
-  OLD_EXTRA="$(grep -vE '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|APP_DB_USER|APP_DB_PASSWORD|ASPNETCORE_ENVIRONMENT|REQUIRE_PQC_VERIFICATION|BOOTSTRAP_ADMIN_USER|BOOTSTRAP_ADMIN_PASSWORD|RP_GATEWAY|GATEWAY_[A-Z_]+|COMPOSE_PROFILES)=|^#|^$' "$ENVF" || true)"
+  OLD_EXTRA="$(grep -vE '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|APP_DB_USER|APP_DB_PASSWORD|ASPNETCORE_ENVIRONMENT|REQUIRE_PQC_VERIFICATION|BOOTSTRAP_ADMIN_USER|BOOTSTRAP_ADMIN_PASSWORD|RP_GATEWAY|GATEWAY_[A-Z_]+|COMPOSE_PROFILES|RP_PROJECT_DIR|RP_IMAGES)=|^#|^$' "$ENVF" || true)"
 fi
 
 echo "== ReflectoPatronus first-time setup (Docker) =="
@@ -51,6 +51,8 @@ write_env() {
       printf '%s=%s\n' POSTGRES_DB "$POSTGRES_DB" POSTGRES_USER "$POSTGRES_USER" POSTGRES_PASSWORD "$POSTGRES_PASSWORD" \
         APP_DB_USER "$APP_DB_USER" APP_DB_PASSWORD "$APP_DB_PASSWORD" ASPNETCORE_ENVIRONMENT "$ASPNETCORE_ENVIRONMENT" \
         REQUIRE_PQC_VERIFICATION "$REQUIRE_PQC_VERIFICATION"
+      echo "# One-click updates: the updater service works in this folder (absolute path), and uses published images when RP_IMAGES=1."
+      printf '%s=%s\n' RP_PROJECT_DIR "$ROOT"; if $GHCR; then echo "RP_IMAGES=1"; fi
       echo "# First-run administrator. The password is removed automatically once the login has been verified."
       printf '%s=%s\n' BOOTSTRAP_ADMIN_USER "$BOOTSTRAP_ADMIN_USER" BOOTSTRAP_ADMIN_PASSWORD "${1-$BOOTSTRAP_ADMIN_PASSWORD}"
       if [[ $RP_GATEWAY == y ]]; then
@@ -75,7 +77,7 @@ DC=(docker compose --env-file "$ENVF"); $GHCR && DC=(docker compose -f docker-co
 $GHCR && "${DC[@]}" pull || "${DC[@]}" build
 "${DC[@]}" up -d db
 "$ROOT/scripts/migrate.sh" docker
-"${DC[@]}" up -d api
+"${DC[@]}" up -d api updater
 [[ $RP_GATEWAY == y ]] && "${DC[@]}" up -d gateway
 echo "Waiting for the administrator login..."
 if wait_for_login http://127.0.0.1:8080 "$BOOTSTRAP_ADMIN_USER" "$BOOTSTRAP_ADMIN_PASSWORD" 90; then

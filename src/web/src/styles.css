@@ -185,3 +185,10 @@ fieldset.thick { margin: .6rem 0; padding: .4rem .6rem; border: 1px solid var(--
 :root[data-theme=dark] .updatebar { background: #4a3d12; color: #f6e7b0; border-color: #6d5a1c; } pre.cmd { background: rgba(127,127,127,.15); padding: .4rem .6rem; border-radius: 4px; white-space: pre-wrap; margin: .3rem 0; user-select: all; }
 .maint.wide { grid-template-columns: minmax(36rem, 42%) minmax(0, 1fr); } .maint.wide .maint-list .grid-table td:nth-child(2) { max-width: 13rem; } .maint-list .grid-table { width: 100%; }
 @media (max-width: 1100px) { .maint.wide { grid-template-columns: 1fr; } }
+
+.logo-pick { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap }
+.logo-box { width: 9rem; height: 5rem; border: 1px dashed var(--line); border-radius: 6px; display: grid; place-items: center; background: repeating-conic-gradient(#f3f5f8 0 25%, #fff 0 50%) 0 0 / 14px 14px }
+.logo-box img { max-width: 100%; max-height: 100%; object-fit: contain }
+.btn-file { border: 1px solid var(--line); border-radius: 4px; padding: .3rem .7rem; cursor: pointer; background: var(--panel) } .btn-file:hover { background: var(--surface2) }
+
+.whatsnew { margin: .2rem 0 .6rem 1.2rem; padding: 0; font-size: .92em; max-height: 9rem; overflow: auto } .whatsnew li { margin: .1rem 0 }

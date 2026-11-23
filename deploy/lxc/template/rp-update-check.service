@@ -1,8 +1,8 @@
 [Unit]
-Description=Weekly check for a newer ReflectoPatronus build (only looks; never changes anything)
+Description=Weekly: look for a newer ReflectoPatronus build and download it ahead of time (installing stays a click in the console)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c '/usr/local/sbin/rp-update --check --notify || [ $? -eq 10 ] || true'
+ExecStart=/bin/sh -c '/usr/local/sbin/rp-update --stage || true'

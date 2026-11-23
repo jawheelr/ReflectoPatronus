@@ -12,6 +12,7 @@ services:
       Security__RequirePqcVerification: ${REQUIRE_PQC_VERIFICATION:-false}
       # First run only: creates this user with this password if NO user has a password yet. Remove afterwards.
       Transfer__Directory: /data/transfer
+      Updates__Directory: /data/update       # hand-off folder shared with the updater service
       Gateway__Mode: ${GATEWAY_MODE:-off}
       Gateway__SharedSecret: ${GATEWAY_SHARED_SECRET:-}
       Bootstrap__AdminUser: ${BOOTSTRAP_ADMIN_USER:-}
@@ -22,9 +23,10 @@ services:
         condition: service_healthy
     ports:
       # Development only. In production, put the API behind the reverse proxy.
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"
     volumes:
       - transfer-data:/data/transfer
+      - update-data:/data/update
       - ./certs/ca.crt:/run/db-certs/ca.crt:ro
       - ./certs/api-client.crt:/run/db-certs/api-client.crt:ro
       - ./certs/api-client.key:/run/db-certs/api-client.key:ro
@@ -65,6 +67,28 @@ services:
       retries: 20
       start_period: 20s
 
+  # Installs updates when an administrator clicks "Update now" in the console (and downloads them ahead of time).
+  # It needs the Docker socket, i.e. full control of Docker on this machine, so it is a separate container with no open ports
+  # and no network input: the only thing it reads is a request file the API writes. It never acts on its own.
+  # To turn one-click updates off, remove this service (./scripts/update.sh in a terminal keeps working).
+  # RP_PROJECT_DIR is this folder's absolute path; scripts/setup.sh and scripts/update.sh write it to .env.
+  updater:
+    build:
+      context: ./docker/updater
+    environment:
+      RP_PROJECT_DIR: ${RP_PROJECT_DIR:-}
+      RP_BRANCH: ${RP_BRANCH:-main}
+      UPDATE_DIR: /data/update
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${RP_PROJECT_DIR:-.}
+        target: ${RP_PROJECT_DIR:-/project}
+      - update-data:/data/update
+    networks:
+      - app
+    restart: unless-stopped
+
   # Remote access with mTLS + post-quantum key exchange (compose profile "gateway": COMPOSE_PROFILES=gateway in .env,
   # set up by scripts/setup.sh). Publish GATEWAY_PORT on your router; keep 80/443 for other services (e.g. Synology).
   gateway:
@@ -95,5 +119,6 @@ networks:
     internal: true
 
 volumes:
+  update-data:     # hand-off between the API and the updater: request.json, status.json (progress page)
   transfer-data:   # large database exports/imports run on the server and use this folder (Utilities > Import / Export Database)
   postgres-data:

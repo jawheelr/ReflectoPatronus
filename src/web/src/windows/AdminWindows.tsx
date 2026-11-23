@@ -8,7 +8,14 @@ import { Field, Modal, Toolbar } from '../shell/ui'
 export function CompanyInfo() {
   const { me, toast } = useShell(), admin = api.can(me, 'company.write')
   const [c, setC] = useState<(api.CompanyInfo & { timeZone?: string | null }) | null>(null); const [dirty, setDirty] = useState(false); const [error, setError] = useState('')
-  useEffect(() => { api.getCompany().then(setC).catch(e => setError(e.message)) }, [])
+  const [logo, setLogo] = useState<string | null>(null)
+  useEffect(() => { api.getCompany().then(setC).catch(e => setError(e.message)); api.getLogoDataUrl().then(setLogo) }, [])
+  async function pickLogo(f: File | undefined) {
+    if (!f) return
+    if (f.size > 1024 * 1024) return setError('The logo is larger than 1 MB. Use a smaller image.')
+    try { await api.putLogo(f); setLogo(await api.getLogoDataUrl()); setError(''); toast('Logo saved.') } catch (e) { setError((e as Error).message) }
+  }
+  async function dropLogo() { try { await api.deleteLogo(); setLogo(null); toast('Logo removed.') } catch (e) { setError((e as Error).message) } }
   if (!c) return <div className="form">{error ? <p className="formerr">{error}</p> : <p className="muted">Loading…</p>}</div>
   const set = (p: Partial<api.CompanyInfo>) => { setC({ ...c, ...p }); setDirty(true) }
   const txt = (k: keyof api.CompanyInfo, label: string, w = '20rem') => <Field label={label}><input value={(c[k] as string | null) ?? ''} onChange={e => set({ [k]: e.target.value || null })} style={{ width: w }} disabled={!admin} /></Field>
@@ -19,6 +26,11 @@ export function CompanyInfo() {
       {error && <p className="formerr">{error}</p>}
       {txt('name', 'Company name')}{txt('address1', 'Address')}{txt('address2', '')}{txt('city', 'City', '14rem')}{txt('state', 'State', '4rem')}{txt('zip', 'ZIP', '8rem')}
       {txt('phone', 'Phone', '12rem')}{txt('fax', 'Fax', '12rem')}{txt('email', 'E-mail', '20rem')}
+      <Field label="Logo"><span className="logo-pick">
+        <span className="logo-box">{logo ? <img src={logo} alt="Company logo" /> : <small className="muted">No logo</small>}</span>
+        {admin && <><label className="btn-file"><input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden onChange={e => { void pickLogo(e.target.files?.[0]); e.target.value = '' }} />{logo ? 'Replace…' : 'Upload…'}</label>
+          {logo && <button type="button" onClick={dropLogo}>Remove</button>}</>}
+        <small className="muted">PNG, JPEG, WebP or SVG, up to 1 MB. A light or transparent image works best as a watermark.</small></span></Field>
       <Field label="Invoice note" wide><textarea className="edit" value={c.invoiceNote ?? ''} disabled={!admin} onChange={e => set({ invoiceNote: e.target.value || null })} /></Field>
       <Field label="Disclaimer" wide><textarea className="edit" value={c.disclaimer ?? ''} disabled={!admin} onChange={e => set({ disclaimer: e.target.value || null })} /></Field>
       <Field label=""><label className="chk"><input type="checkbox" checked={c.useDisclaimer} disabled={!admin} onChange={e => set({ useDisclaimer: e.target.checked })} /> Print the disclaimer on quotes and invoices</label></Field>
