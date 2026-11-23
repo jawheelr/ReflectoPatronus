@@ -39,7 +39,7 @@ JOBFAIL() { if [[ $JOB -eq 1 ]]; then S failed "$STEP" 100 "$1"; else say "$1"; 
 job_state() { jq -r .state "$ST" 2>/dev/null || true; }
 set_staged() {  # sha message  (stage info shown in the console)
   [[ $HAVE_JQ -eq 1 && -d "$UPD" ]] || return 0
-  jq -c --arg sha "$1" --arg msg "$2" --argjson now "$(date +%s)" '.staged={sha:$sha,short:($sha[0:7]),message:$msg,commits:[],at:$now}|if (.state|IN("failed","rolled_back","done",null)) then .state="staged" else . end' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"; chmod 0644 "$ST"; }
+  jq -c --arg sha "$1" --arg msg "$2" --argjson now "$(date +%s)" '.staged={sha:$sha,short:($sha[0:7]),message:$msg,commits:[],at:$now}' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"; chmod 0644 "$ST"; }
 
 # a request from the console
 if [[ $JOB -eq 1 ]]; then

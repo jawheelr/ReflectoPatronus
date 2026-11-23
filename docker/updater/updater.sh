@@ -34,7 +34,7 @@ do_stage() {
   there="$(git rev-parse "origin/$BRANCH")"; here="$(git rev-parse HEAD)"; msg="$(git log -1 --format=%s "origin/$BRANCH")"
   local commits; commits="$(git --no-pager log --format='%h %s' --no-decorate "$here..$there" 2>/dev/null | head -30 | jq -R . | jq -sc .)"
   jq -c --arg sha "$there" --arg msg "$msg" --argjson commits "${commits:-[]}" --argjson now "$(now)" \
-    '.staged={sha:$sha,short:($sha[0:7]),message:$msg,commits:$commits,at:$now} | if (.state|IN("failed","rolled_back","done",null)) then .state="staged" else . end' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"; chmod 0644 "$ST"
+    '.staged={sha:$sha,short:($sha[0:7]),message:$msg,commits:$commits,at:$now}'   # never touch .state: a finished job's result must stay readable by the progress page "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"; chmod 0644 "$ST"
   echo "updater: staged ${there:0:7}"
 }
 
