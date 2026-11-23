@@ -195,3 +195,14 @@ fieldset.thick { margin: .6rem 0; padding: .4rem .6rem; border: 1px solid var(--
 .btn-file { border: 1px solid var(--line); border-radius: 4px; padding: .3rem .7rem; cursor: pointer; background: var(--panel) } .btn-file:hover { background: var(--surface2) }
 
 .whatsnew { margin: .2rem 0 .6rem 1.2rem; padding: 0; font-size: .92em; max-height: 9rem; overflow: auto } .whatsnew li { margin: .1rem 0 }
+
+/* ---- Accounting window ---- */
+.acct h3 { margin: .9rem 0 .3rem; } .acct h4 { margin: .9rem 0 .2rem; }
+.acct .row { display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; margin: .45rem 0; }
+.acct .row button.on { background: var(--hover); border-color: var(--accent); }
+.acct .check { display: flex; gap: .45rem; align-items: center; margin: .35rem 0; }
+.acct .warn { color: #b00020; } .acct .steps { padding-left: 1.2rem; line-height: 1.6; } .acct .steps li { margin: .5rem 0; }
+.acct .secret { padding: .2rem .5rem; background: var(--surface2); border: 1px solid var(--line); border-radius: 4px; user-select: all; letter-spacing: .04em; }
+.acct .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: .1rem 1.2rem; }
+.acct .field { flex-wrap: wrap; } .acct .field > span { width: 11rem; } .acct .field small { flex-basis: 100%; margin-left: 11.5rem; }
+.acct td.num, .acct th.num { text-align: right; }

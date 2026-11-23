@@ -17,7 +17,10 @@ passed = failed = 0
 def call(method, path, body=None, token=None):
     req = urllib.request.Request(URL + path, method=method, data=None if body is None else json.dumps(body).encode(), headers={'content-type': 'application/json', **({'Authorization': 'Bearer ' + token} if token else {})})
     try:
-        with urllib.request.urlopen(req) as r: raw = r.read(); return r.status, (json.loads(raw) if raw else None)
+        with urllib.request.urlopen(req) as r:
+            raw = r.read()
+            try: return r.status, (json.loads(raw) if raw else None)
+            except ValueError: return r.status, raw   # a file download
     except urllib.error.HTTPError as e:
         raw = e.read()
         try: return e.code, json.loads(raw)
@@ -93,6 +96,9 @@ try:
         ('clean-up tool', 'POST', '/utilities/delete-quotes', {'dryRun': True}, ['utilities.cleanup']),
         ('update status', 'GET', '/updates', None, ['users.manage']),
         ('check for updates', 'POST', '/updates/dismiss', None, ['users.manage']),
+        ('accounting overview', 'GET', '/accounting', None, ['accounting.manage']),
+        ('accounting queue', 'GET', '/accounting/queue', None, ['accounting.manage']),
+        ('accounting export', 'GET', '/accounting/export/iif?mark=false', None, ['accounting.manage']),
         ('transfer files', 'GET', '/admin/transfer/files', None, ['transfer.manage']),
         ('start export', 'POST', '/admin/transfer/ticket', {'file': 'nope.rpb'}, ['transfer.manage']),
     ]

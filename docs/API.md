@@ -124,3 +124,6 @@ Each ingest returns `{added, changed, unchanged, batchId, priceChanges}`. A newe
 
 ## Company logo
 `GET /company/logo` (any signed-in user; 404 if none), `PUT /company/logo` with the image as the body and its `Content-Type` (png, jpeg, webp or svg; max 1 MB), `DELETE /company/logo` (`company.write`). `GET /company` returns `hasLogo`. The logo is part of database export/import. The print dialog uses it as the watermark (the company name when there is no logo).
+
+## Accounting
+See [ACCOUNTING.md](ACCOUNTING.md): `/api/v1/accounting/*` (permission `accounting.manage`) and the QuickBooks Web Connector endpoint `POST /qbwc` (own user name and password).

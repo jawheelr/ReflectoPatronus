@@ -24,7 +24,7 @@ public static class Permissions
         new("pricing.manage", "Prices and tables", "Supplier pricing and cost increases"),
         new("reports.view", "Reports", "Run and print reports"),
         new("company.write", "Administration", "Change the company details"), new("users.manage", "Administration", "Add users, change groups and reset passwords"),
-        new("transfer.manage", "Administration", "Export and import the database"), new("utilities.cleanup", "Administration", "Delete old quotes and unused customers"),
+        new("accounting.manage", "Administration", "Send invoices and payments to accounting software"), new("transfer.manage", "Administration", "Export and import the database"), new("utilities.cleanup", "Administration", "Delete old quotes and unused customers"),
     ];
     public static readonly HashSet<string> Keys = Catalog.Select(p => p.Key).ToHashSet();
 

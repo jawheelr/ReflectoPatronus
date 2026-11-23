@@ -29,6 +29,7 @@ builder.Services.AddHttpClient("updates", c =>
     c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     c.Timeout = TimeSpan.FromSeconds(15);
 });
+builder.Services.AddSingleton<ReflectoPatronus.Api.Accounting.QbWebConnector>();
 builder.Services.AddSingleton<ReflectoPatronus.Api.Updates.UpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ReflectoPatronus.Api.Updates.UpdateService>());
 var app = builder.Build();
@@ -80,6 +81,8 @@ ReflectoPatronus.Api.Admin.TransferJobs.Map(app, api);
 ReflectoPatronus.Api.Admin.AdminEndpoints.Map(api);
 ReflectoPatronus.Api.Updates.UpdateEndpoints.Map(api);
 ReflectoPatronus.Api.Updates.UpdateEndpoints.MapPublic(app);
+ReflectoPatronus.Api.Accounting.AccountingEndpoints.Map(api);
+ReflectoPatronus.Api.Accounting.QbWebConnector.Map(app);
 ReflectoPatronus.Api.Catalog.CatalogEndpoints.Map(api);
 ReflectoPatronus.Api.Reports.ReportEndpoints.Map(api);
 // Security status exposes TLS/cipher details of the DB link: signed-in users only (via the fallback policy).

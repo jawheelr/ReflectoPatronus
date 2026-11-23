@@ -322,3 +322,31 @@ export const getUpdateStatus = () => call<UpdateStatus>('/updates')
 export const checkForUpdates = () => call<UpdateStatus>('/updates/check', { method: 'POST' })
 export const applyUpdate = (backup: boolean) => call<{ progressUrl: string }>('/updates/apply', { method: 'POST', body: JSON.stringify({ backup }) })
 export const dismissUpdate = () => call<void>('/updates/dismiss', { method: 'POST' })
+
+// ---- Accounting (QuickBooks Desktop push, IIF and Sage 50 / Peachtree files) ----
+export interface AccountingConfig {
+  target: 'off' | 'qbd'; since?: string | null; customerNaming?: string | null; incomeAccount?: string | null; taxAgency?: string | null
+  arAccount?: string | null; taxPayableAccount?: string | null; undepositedAccount?: string | null; depositAccount?: string | null; terms?: string | null
+  sendPaymentMethod: boolean; items: Record<string, string>; taxItems: Record<string, string>; taxGroupItems: Record<string, string>
+  qbwcUser?: string | null; qbwcPassword?: string | null; publicUrl?: string | null; runEveryMinutes?: number | null
+}
+export interface AccountingOverview {
+  config: AccountingConfig
+  effective: { income: string; agency: string; ar: string; taxPayable: string; undeposited: string; user: string; every: number; naming: string; since: string }
+  pending: { documents: number; payments: number; voids: number }; sent: number; errors: number; skipped: number
+  last: { at: string; sent: number; errors: number; message: string | null; finished: boolean } | null
+}
+export interface AccountingRow { kind: string; refId: number; label: string; party: string | null; date: string | null; amount: number | null; status: string; note: string | null; sentAt: string | null }
+export const getAccounting = () => call<AccountingOverview>('/accounting')
+export const saveAccounting = (c: AccountingConfig) => call<AccountingConfig>('/accounting/config', { method: 'PUT', body: JSON.stringify(c) })
+export const newAccountingPassword = () => call<{ password: string }>('/accounting/qbwc/password', { method: 'POST' })
+export const getAccountingQueue = (status: string) => call<AccountingRow[]>(`/accounting/queue?status=${status}`)
+export const retryAccounting = (kind?: string, refId?: number) => call<{ cleared: number }>('/accounting/retry', { method: 'POST', body: JSON.stringify({ kind, refId }) })
+export const skipAccounting = (kind: string, refId: number) => call<void>('/accounting/skip', { method: 'POST', body: JSON.stringify({ kind, refId }) })
+/** Fetches a file from the API with the sign-in token and offers it as a download. */
+export async function downloadAccounting(path: string, fallbackName: string) {
+  let r = await raw(path); if (r.status === 401 && await refresh()) r = await raw(path)
+  if (!r.ok) throw await errorOf(r)
+  const name = /filename="?([^";]+)/.exec(r.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
+  const url = URL.createObjectURL(await r.blob()); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
