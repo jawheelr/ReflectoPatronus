@@ -52,7 +52,7 @@ write_env() {
         APP_DB_USER "$APP_DB_USER" APP_DB_PASSWORD "$APP_DB_PASSWORD" ASPNETCORE_ENVIRONMENT "$ASPNETCORE_ENVIRONMENT" \
         REQUIRE_PQC_VERIFICATION "$REQUIRE_PQC_VERIFICATION"
       echo "# One-click updates: the updater service works in this folder (absolute path), and uses published images when RP_IMAGES=1."
-      printf '%s=%s\n' RP_PROJECT_DIR "$ROOT"; if $GHCR; then echo "RP_IMAGES=1"; fi
+      printf '%s="%s"\n' RP_PROJECT_DIR "$ROOT"; if $GHCR; then echo "RP_IMAGES=1"; fi
       echo "# First-run administrator. The password is removed automatically once the login has been verified."
       printf '%s=%s\n' BOOTSTRAP_ADMIN_USER "$BOOTSTRAP_ADMIN_USER" BOOTSTRAP_ADMIN_PASSWORD "${1-$BOOTSTRAP_ADMIN_PASSWORD}"
       if [[ $RP_GATEWAY == y ]]; then

@@ -13,7 +13,7 @@ ask() { [[ $ASSUME -eq 1 ]] && return 0; local a; read -r -p "$1 [y/N] " a; [[ "
 [[ -f .env ]] || { echo "No .env here. This does not look like a set-up install (run scripts/setup.sh first)."; exit 1; }
 [[ -d .git ]] || { echo "This folder is not a git checkout, so there is nothing to pull. Clone the repository, or copy .env and certs/ into a clone."; exit 1; }
 # Make sure one-click updates (the 'updater' service) are switched on for next time.
-grep -q '^RP_PROJECT_DIR=' .env || { printf '\nRP_PROJECT_DIR=%s\n' "$ROOT" >> .env; }
+grep -q '^RP_PROJECT_DIR=' .env || { printf '\nRP_PROJECT_DIR="%s"\n' "$ROOT" >> .env; }
 [[ $IMAGES -eq 1 ]] && ! grep -q '^RP_IMAGES=' .env && printf 'RP_IMAGES=1\n' >> .env
 COMPOSE=(docker compose --env-file .env); [[ $IMAGES -eq 1 ]] && COMPOSE=(docker compose --env-file .env -f docker-compose.yml -f docker-compose.ghcr.yml)
 
