@@ -20,7 +20,7 @@ import { UpdateBanner, UpdateDialog, useUpdates } from './UpdateBanner'
 import { Modal } from './ui'
 import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
-interface Win { id: string; kind: Kind; arg?: number; title: string }
+interface Win { id: string; kind: Kind; arg?: number; title: string; min?: boolean; max?: boolean }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
 const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
@@ -70,11 +70,23 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   const open = useCallback((kind: Kind, arg?: number) => {
     // A blank quote/customer entry window can be opened repeatedly; a specific record or a tool window is reused.
     const id = arg != null ? `${kind}:${arg}` : kind === 'quote' || kind === 'customer' ? `${kind}:new:${++seq.current}` : kind
-    setWins(w => w.some(x => x.id === id) ? w : [...w, { id, kind, arg, title: TITLES[kind] }])
+    setWins(w => w.some(x => x.id === id) ? w.map(x => x.id === id && x.min ? { ...x, min: false } : x) : [...w, { id, kind, arg, title: TITLES[kind] }])
     setActive(id)
   }, [])
+  const minimize = useCallback((id: string) => {
+    setWins(w => { const i = w.findIndex(x => x.id === id); const next = w.map(x => x.id === id ? { ...x, min: true } : x)
+      setActive(a => a !== id ? a : ([...next.slice(0, i).reverse(), ...next.slice(i + 1)].find(x => !x.min)?.id ?? null)); return next })
+  }, [])
+  const toggleMax = useCallback((id: string) => setWins(w => w.map(x => x.id === id ? { ...x, max: !x.max } : x)), [])
+  /** Taskbar behaviour: a minimized window comes back, the active one minimizes, another one is brought to the front. */
+  const pick = (id: string) => {
+    const w = wins.find(x => x.id === id); if (!w) return
+    if (w.min) { setWins(ws => ws.map(x => x.id === id ? { ...x, min: false } : x)); setActive(id) }
+    else if (id === active) minimize(id)
+    else setActive(id)
+  }
   const close = useCallback((id: string) => {
-    setWins(w => { const i = w.findIndex(x => x.id === id); const next = w.filter(x => x.id !== id); setActive(a => a === id ? (next[Math.max(0, i - 1)]?.id ?? null) : a); return next })
+    setWins(w => { const i = w.findIndex(x => x.id === id); const next = w.filter(x => x.id !== id); setActive(a => a === id ? ([...next.slice(0, i).reverse(), ...next.slice(i)].find(x => !x.min)?.id ?? null) : a); return next })
   }, [])
   const setTitle = useCallback((id: string, title: string) => setWins(w => w.map(x => x.id === id && x.title !== title ? { ...x, title } : x)), [])
   const toast = useCallback((message: string, kind: 'ok' | 'error' = 'ok') => {
@@ -162,7 +174,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
             <section className="openwins">
               <h3 onClick={() => setCollapsed(c => ({ ...c, o: !c.o }))}>Open Windows <span>{collapsed.o ? '⌄' : '⌃'}</span></h3>
               {!collapsed.o && <ul>{wins.map(w => (
-                <li key={w.id}><button className={w.id === active ? 'on' : ''} onClick={() => setActive(w.id)} title={w.title}>{w.title}</button></li>
+                <li key={w.id}><button className={(w.id === active && !w.min ? 'on ' : '') + (w.min ? 'minimized' : '')} onClick={() => pick(w.id)} title={w.min ? `${w.title} (minimized, click to restore)` : w.title}>{w.title}</button></li>
               ))}</ul>}
             </section>
           </aside>
@@ -172,8 +184,15 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
               <p>Press <kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd> to find a customer or document, or start a <button className="link" onClick={() => open('quote')}>new quote</button>.</p>
             </div>}
             {wins.map(w => (
-              <section key={w.id} className="window" hidden={w.id !== active} aria-label={w.title}>
-                <header><span>{w.title}</span><button className="x" onClick={() => close(w.id)} aria-label={`Close ${w.title}`}>×</button></header>
+              <section key={w.id} className={'window' + (w.max ? ' max' : '')} hidden={w.id !== active || !!w.min} aria-label={w.title}>
+                <header onDoubleClick={e => { if (!(e.target as HTMLElement).closest('button')) toggleMax(w.id) }} title="Double-click to maximize or restore">
+                  <span>{w.title}</span>
+                  <span className="wbtns">
+                    <button className="x" onClick={() => minimize(w.id)} aria-label={`Minimize ${w.title}`} title="Minimize">–</button>
+                    <button className="x" onClick={() => toggleMax(w.id)} aria-label={`${w.max ? 'Restore' : 'Maximize'} ${w.title}`} title={w.max ? 'Restore' : 'Maximize'}>{w.max ? '❐' : '☐'}</button>
+                    <button className="x close" onClick={() => close(w.id)} aria-label={`Close ${w.title}`} title="Close">×</button>
+                  </span>
+                </header>
                 <div className="window-body">
                   <WinIdContext.Provider value={w.id}>
                     {w.kind === 'customer' && <CustomerEntry initialId={w.arg} />}
