@@ -183,7 +183,13 @@ public static class UpdateEndpoints
             o["runningVersion"] = u.CurrentSha(); o["now"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             return Results.Json(o, new JsonSerializerOptions { PropertyNamingPolicy = null }, statusCode: 200);
         }).AllowAnonymous();
-        app.MapGet("/update-progress", () => Results.Content(UpdatePage.Html, "text/html; charset=utf-8")).AllowAnonymous();
+        app.MapGet("/update-progress", (HttpContext ctx) =>
+        {
+            // The page is one self-contained file with inline style and script, so it gets its own policy (the global one allows only same-origin files).
+            ctx.Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+            ctx.Response.Headers.CacheControl = "no-store";
+            return Results.Content(UpdatePage.Html, "text/html; charset=utf-8");
+        }).AllowAnonymous();
     }
 
     public static void Map(RouteGroupBuilder api)
