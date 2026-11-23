@@ -49,9 +49,9 @@ rollback() {
   if dc up -d --no-build api >/dev/null 2>&1 && wait_healthy api 60; then
     local bk=""; [[ -n "${BACKUP_FILE:-}" ]] && bk=" Your data is untouched; a database backup from just before the update is at $BACKUP_FILE."
     jq -c --arg b "${BACKUP_FILE:-}" '.backupFile=$b' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"
-    S rolled_back "$STEP" 100 "The update did not work ($FAILED), so ReflectoPatronus went back to the previous version.$bk"
+    S rolled_back "$STEP" 100 "The update did not work: $FAILED. ReflectoPatronus went back to the previous version.$bk"
   else
-    S failed "$STEP" 100 "The update failed ($FAILED) and the previous version did not restart on its own. On the server run: docker compose logs api"
+    S failed "$STEP" 100 "The update failed: $FAILED. The previous version did not restart on its own. On the server run: docker compose logs api"
   fi
 }
 do_apply() {
@@ -125,7 +125,7 @@ while true; do
     mv "$REQ" "$REQ.taken" 2>/dev/null
     action="$(jq -r '.action // empty' "$REQ.taken" 2>/dev/null)"
     case "$action" in
-      apply) do_apply "$(jq -r '.sha // empty' "$REQ.taken")" "$(jq -r '.backup // true' "$REQ.taken")" ;;
+      apply) do_apply "$(jq -r '.sha // empty' "$REQ.taken")" "$(jq -r 'if .backup == false then "false" else "true" end' "$REQ.taken")" ;;
       stage) do_stage; last_stage="$(now)" ;;
     esac
     rm -f "$REQ.taken"
