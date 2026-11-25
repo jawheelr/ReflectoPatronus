@@ -21,7 +21,7 @@ import { UpdateBanner, UpdateDialog, useUpdates } from './UpdateBanner'
 import { Modal } from './ui'
 import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
-interface Win { id: string; kind: Kind; arg?: number; title: string; min?: boolean; max?: boolean }
+interface Win { id: string; kind: Kind; arg?: number; title: string; min?: boolean; max?: boolean; x?: number; y?: number; z?: number }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
 const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report', accounting: 'Accounting (QuickBooks, Sage 50)' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
@@ -65,15 +65,37 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   const [toasts, setToasts] = useState<Toast[]>([])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const seq = useRef(1000)
+  const zseq = useRef(Math.max(10, ...saved.wins.map(w => w.z ?? 0)))
 
   useEffect(() => { sessionStorage.setItem(SAVED, JSON.stringify({ wins, active })) }, [wins, active])
 
   const open = useCallback((kind: Kind, arg?: number) => {
     // A blank quote/customer entry window can be opened repeatedly; a specific record or a tool window is reused.
     const id = arg != null ? `${kind}:${arg}` : kind === 'quote' || kind === 'customer' ? `${kind}:new:${++seq.current}` : kind
-    setWins(w => w.some(x => x.id === id) ? w.map(x => x.id === id && x.min ? { ...x, min: false } : x) : [...w, { id, kind, arg, title: TITLES[kind] }])
+    const z = ++zseq.current
+    setWins(w => w.some(x => x.id === id) ? w.map(x => x.id === id ? { ...x, min: false, z } : x)
+      : [...w, { id, kind, arg, title: TITLES[kind], x: 12 + (w.length % 8) * 28, y: 12 + (w.length % 8) * 28, z }])
     setActive(id)
   }, [])
+  /** Bring a window to the front. */
+  const raise = useCallback((id: string) => { const z = ++zseq.current; setWins(w => w.map(x => x.id === id ? { ...x, z } : x)); setActive(id) }, [])
+  /** Drag a window by its title bar; it can never leave the page area. */
+  const drag = (e: React.PointerEvent<HTMLElement>, w: Win) => {
+    if (e.button !== 0 || w.max || (e.target as HTMLElement).closest('button')) return
+    const bar = e.currentTarget, win = bar.parentElement as HTMLElement, area = win.parentElement as HTMLElement
+    const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop
+    bar.setPointerCapture(e.pointerId)
+    const move = (m: PointerEvent) => {
+      const x = Math.min(Math.max(ox + m.clientX - sx, 0), Math.max(0, area.clientWidth - win.offsetWidth))
+      const y = Math.min(Math.max(oy + m.clientY - sy, 0), Math.max(0, area.clientHeight - bar.offsetHeight))
+      win.style.left = x + 'px'; win.style.top = y + 'px'
+    }
+    const up = () => {
+      bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up)
+      setWins(ws => ws.map(v => v.id === w.id ? { ...v, x: win.offsetLeft, y: win.offsetTop } : v))
+    }
+    bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up)
+  }
   const minimize = useCallback((id: string) => {
     setWins(w => { const i = w.findIndex(x => x.id === id); const next = w.map(x => x.id === id ? { ...x, min: true } : x)
       setActive(a => a !== id ? a : ([...next.slice(0, i).reverse(), ...next.slice(i + 1)].find(x => !x.min)?.id ?? null)); return next })
@@ -82,9 +104,9 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   /** Taskbar behaviour: a minimized window comes back, the active one minimizes, another one is brought to the front. */
   const pick = (id: string) => {
     const w = wins.find(x => x.id === id); if (!w) return
-    if (w.min) { setWins(ws => ws.map(x => x.id === id ? { ...x, min: false } : x)); setActive(id) }
+    if (w.min) { const z = ++zseq.current; setWins(ws => ws.map(x => x.id === id ? { ...x, min: false, z } : x)); setActive(id) }
     else if (id === active) minimize(id)
-    else setActive(id)
+    else raise(id)
   }
   const close = useCallback((id: string) => {
     setWins(w => { const i = w.findIndex(x => x.id === id); const next = w.filter(x => x.id !== id); setActive(a => a === id ? ([...next.slice(0, i).reverse(), ...next.slice(i)].find(x => !x.min)?.id ?? null) : a); return next })
@@ -185,8 +207,9 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
               <p>Press <kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd> to find a customer or document, or start a <button className="link" onClick={() => open('quote')}>new quote</button>.</p>
             </div>}
             {wins.map(w => (
-              <section key={w.id} className={'window' + (w.max ? ' max' : '')} hidden={w.id !== active || !!w.min} aria-label={w.title}>
-                <header onDoubleClick={e => { if (!(e.target as HTMLElement).closest('button')) toggleMax(w.id) }} title="Double-click to maximize or restore">
+              <section key={w.id} className={'window' + (w.max ? ' max' : '') + (w.id === active ? ' front' : '')} hidden={!!w.min} aria-label={w.title}
+                style={w.max ? { zIndex: w.z ?? 1 } : { left: w.x ?? 12, top: w.y ?? 12, zIndex: w.z ?? 1 }} onPointerDownCapture={() => { if (w.id !== active) raise(w.id) }}>
+                <header onPointerDown={e => drag(e, w)} onDoubleClick={e => { if (!(e.target as HTMLElement).closest('button')) toggleMax(w.id) }} title="Double-click to maximize or restore">
                   <span>{w.title}</span>
                   <span className="wbtns">
                     <button className="x" onClick={() => minimize(w.id)} aria-label={`Minimize ${w.title}`} title="Minimize">–</button>
