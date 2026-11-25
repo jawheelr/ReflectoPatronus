@@ -21,7 +21,7 @@ public static class Permissions
         new("documents.void", "Paperwork", "Void documents"),
         new("receivables.read", "Money", "See balances, open invoices and payments"), new("payments.write", "Money", "Receive payments and apply credits"), new("payments.void", "Money", "Void payments"),
         new("catalog.write", "Prices and tables", "Change parts, prices and the waste table"), new("maintenance.write", "Prices and tables", "Change tax codes and groups, categories, salesmen and statuses"),
-        new("pricing.manage", "Prices and tables", "Supplier pricing and cost increases"),
+        new("pricing.manage", "Prices and tables", "Supplier pricing and cost increases"), new("inventory.manage", "Prices and tables", "Inventory, stock counts and purchase orders to suppliers"),
         new("reports.view", "Reports", "Run and print reports"),
         new("company.write", "Administration", "Change the company details"), new("users.manage", "Administration", "Add users, change groups and reset passwords"),
         new("accounting.manage", "Administration", "Send invoices and payments to accounting software"), new("transfer.manage", "Administration", "Export and import the database"), new("utilities.cleanup", "Administration", "Delete old quotes and unused customers"),

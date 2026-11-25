@@ -82,6 +82,7 @@ ReflectoPatronus.Api.Admin.AdminEndpoints.Map(api);
 ReflectoPatronus.Api.Updates.UpdateEndpoints.Map(api);
 ReflectoPatronus.Api.Updates.UpdateEndpoints.MapPublic(app);
 ReflectoPatronus.Api.Accounting.AccountingEndpoints.Map(api);
+ReflectoPatronus.Api.Inventory.InventoryEndpoints.Map(api);
 ReflectoPatronus.Api.Accounting.QbWebConnector.Map(app);
 ReflectoPatronus.Api.Catalog.CatalogEndpoints.Map(api);
 ReflectoPatronus.Api.Reports.ReportEndpoints.Map(api);

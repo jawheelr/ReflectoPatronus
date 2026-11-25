@@ -99,6 +99,9 @@ try:
         ('accounting overview', 'GET', '/accounting', None, ['accounting.manage']),
         ('accounting queue', 'GET', '/accounting/queue', None, ['accounting.manage']),
         ('accounting export', 'GET', '/accounting/export/iif?mark=false', None, ['accounting.manage']),
+        ('inventory items', 'GET', '/inventory/items', None, ['inventory.manage']),
+        ('inventory orders', 'GET', '/inventory/orders', None, ['inventory.manage']),
+        ('inventory switch', 'PUT', '/inventory/status', {'on': False}, ['inventory.manage']),
         ('transfer files', 'GET', '/admin/transfer/files', None, ['transfer.manage']),
         ('start export', 'POST', '/admin/transfer/ticket', {'file': 'nope.rpb'}, ['transfer.manage']),
     ]

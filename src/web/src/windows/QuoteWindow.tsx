@@ -24,6 +24,8 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
   const [error, setError] = useState('')
   const [printing, setPrinting] = useState(false); const [paying, setPaying] = useState(false); const [crediting, setCrediting] = useState(false)
   const [creditSeqs, setCreditSeqs] = useState<number[]>([]); const [busy, setBusy] = useState(false)
+  const [invOn, setInvOn] = useState(false); const [stock, setStock] = useState<api.StockCheck | null>(null)
+  useEffect(() => { api.getInventoryOn().then(setInvOn).catch(() => undefined) }, [])
 
   const load = (id: number) => api.getDocument(id).then(x => {
     setD(x); setDocType(x.type); setNumber(x.number); setError(''); setTab('General'); setTitle(winId, `${x.typeName} ${x.number}`)
@@ -62,6 +64,7 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
     if (!d) return []
     const t: Tool[] = [{ label: 'Print', icon: 'print', onClick: guard(() => setPrinting(true)), title: 'Preview and print this document' }]
     if (d.voided) return t
+    if (invOn && (d.type === 'Q' || d.type === 'W')) t.push({ label: 'Stock', icon: 'notes', onClick: () => void api.stockCheck(d.id).then(setStock).catch(e => toast((e as Error).message, 'error')), title: 'Check this job against stock on hand' })
     if (d.type === 'Q' && api.can(me, 'workorders.write')) t.push({ label: 'Work Order', icon: 'notes', onClick: guard(() => void convert('W')), disabled: busy, title: 'Create a work order from this quote' })
     if ((d.type === 'Q' || d.type === 'W') && api.can(me, 'invoices.write')) t.push({ label: 'Invoice', icon: 'notes', onClick: guard(() => void convert('I')), disabled: busy, title: d.type === 'W' ? 'Turn this work order into an invoice' : 'Create an invoice from this quote' })
     if (d.type === 'I' && api.can(me, 'credits.write')) t.push({ label: 'Credit', icon: 'notes', onClick: guard(() => { setCreditSeqs(d.lines.filter(l => l.amount !== 0).map(l => l.seq)); setCrediting(true) }), disabled: busy, title: 'Credit all or some lines of this invoice' })
@@ -169,6 +172,17 @@ export function QuoteWindow({ initialId }: { initialId?: number }) {
         hidePricesDefault={!!balance?.noPrices || (d.type === 'W' && !prefs.showPricesOnWorkOrder)}
         build={(hide, company) => renderDocument(d, { company, hidePrices: hide })}
         onPrinted={() => { void api.markPrinted(d.id).then(() => load(d.id)) }} onClose={() => setPrinting(false)} />}
+      {stock && d && (
+        <Modal title={`Stock for ${d.typeName.toLowerCase()} ${d.number}`} onClose={() => setStock(null)} width={720}>
+          <div className="lookup-body">
+            {stock.lines.length === 0 ? <p>Nothing on this job is tracked in inventory. Only glass and parts linked to a supplier item under Supplier Pricing are counted.</p> : <>
+              <table className="grid-table"><thead><tr><th>Item</th><th className="num">This job needs</th><th className="num">On hand</th><th className="num">Set aside by work orders</th><th className="num">On order</th><th /></tr></thead>
+                <tbody>{stock.lines.map(l => <tr key={l.sku}><td>{l.sku}{l.description ? ` – ${l.description}` : ''}</td><td className="num">{l.need} {l.unit}</td><td className="num">{l.onHand}</td><td className="num">{l.committed}</td><td className="num">{l.onOrder}</td>
+                  <td>{l.shortBy > 0 ? <strong className="neg">Short {l.shortBy}</strong> : 'OK'}</td></tr>)}</tbody></table>
+              <p className="muted small">{d.type === 'W' ? 'This work order is already part of “set aside”.' : 'A quote sets nothing aside; the check adds it to what open work orders need.'} Stock is used up when the work order becomes an invoice.</p></>}
+            <div className="actions"><button onClick={() => setStock(null)}>Close</button></div>
+          </div>
+        </Modal>)}
       {paying && d?.customerId && <PaymentDialog customerId={d.customerId} customerName={d.customer.name ?? ''} preselect={d.id} onDone={() => load(d.id)} onClose={() => setPaying(false)} />}
       {crediting && d && (
         <Modal title={`Credit memo for invoice ${d.number}`} onClose={() => setCrediting(false)} width={720}>

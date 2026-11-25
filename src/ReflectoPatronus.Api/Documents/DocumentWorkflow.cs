@@ -144,7 +144,7 @@ public static class DocumentWorkflow
             await c.ExecuteNonQueryAsync(ct);
         }
 
-        if (to == "I") await Ledger.Post(cn, tx, customer.Value, newId, null, null, total, 1, uid, ct);
+        if (to == "I") { await Ledger.Post(cn, tx, customer.Value, newId, null, null, total, 1, uid, ct); await Inventory.Stock.UseForInvoice(cn, tx, newId, uid, ct); }
         else if (to == "C")
         {
             if (total >= 0) return Results.BadRequest(new { error = "Nothing to credit: the chosen lines add up to zero." });

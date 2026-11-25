@@ -350,3 +350,36 @@ export async function downloadAccounting(path: string, fallbackName: string) {
   const name = /filename="?([^";]+)/.exec(r.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
   const url = URL.createObjectURL(await r.blob()); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
+
+// ---- Inventory and purchasing ----
+export interface InvItem { id: number; supplierId: number; supplier: string; sku: string; description: string | null; unitCost: number; unit: string; reorderPoint: number; orderMultiple: number; leadDays: number; location: string | null; active: boolean; onHand: number; committed: number; quoted: number; onOrder: number; perDay: number; available: number; suggest: number }
+export interface InvNeed { id: number; supplierId: number; supplier: string; sku: string; description: string | null; unit: string; unitCost: number; onHand: number; committed: number; quoted: number; onOrder: number; perDay: number; reorderPoint: number; suggest: number; cost: number }
+export interface InvCatalogRow { supplierItemId: number; supplier: string; sku: string; description: string | null; unitCost: number; links: number; tracked: boolean }
+export interface InvMove { at: string; qty: number; kind: string; note: string | null; user: string | null; document: string | null; poId: number | null }
+export interface InvSupplier { id: number; name: string; email: string | null; phone: string | null; orderNotes: string | null }
+export interface PoRow { id: number; supplier: string; status: string; createdAt: string; sentAt: string | null; expectedDate: string | null; lines: number; total: number }
+export interface PoLine { id: number; itemId: number; sku: string; description: string | null; unit: string; qty: number; unitCost: number; received: number }
+export interface PoDetail { order: { id: number; status: string; createdAt: string; sentAt: string | null; expectedDate: string | null; note: string | null; supplierId: number; supplier: string; supplierEmail: string | null; supplierPhone: string | null; supplierNotes: string | null; company: string | null; companyPhone: string | null }; lines: PoLine[] }
+export interface StockCheck { on: boolean; type?: string; lines: { sku: string; description: string | null; unit: string; need: number; onHand: number; committed: number; onOrder: number; shortBy: number }[] }
+const JB = (m: string, b?: unknown) => ({ method: m, ...(b === undefined ? {} : { body: JSON.stringify(b) }) })
+export const getInventoryOn = () => call<{ on: boolean }>('/inventory/status').then(r => r.on)
+export const setInventoryOn = (on: boolean) => call<{ on: boolean }>('/inventory/status', JB('PUT', { on }))
+export const getInvItems = () => call<InvItem[]>('/inventory/items')
+export const getInvCatalog = (q: string) => call<InvCatalogRow[]>(`/inventory/catalog?q=${encodeURIComponent(q)}`)
+export const addInvItem = (b: object) => call<{ id: number }>('/inventory/items', JB('POST', b))
+export const editInvItem = (id: number, b: object) => call<void>(`/inventory/items/${id}`, JB('PUT', b))
+export const adjustInvItem = (id: number, b: { qty?: number; setTo?: number; note?: string }) => call<void>(`/inventory/items/${id}/adjust`, JB('POST', b))
+export const getInvMoves = (id: number) => call<InvMove[]>(`/inventory/items/${id}/moves`)
+export const getInvNeeds = (coverDays: number) => call<{ coverDays: number; items: InvNeed[] }>(`/inventory/needs?coverDays=${coverDays}`)
+export const getInvSuppliers = () => call<InvSupplier[]>('/inventory/suppliers')
+export const saveInvSupplier = (id: number, b: object) => call<void>(`/inventory/suppliers/${id}`, JB('PUT', b))
+export const getPos = (status?: string) => call<PoRow[]>(`/inventory/orders${status ? `?status=${status}` : ''}`)
+export const getPo = (id: number) => call<PoDetail>(`/inventory/orders/${id}`)
+export const createPo = (b: object) => call<{ id: number }>('/inventory/orders', JB('POST', b))
+export const poFromNeeds = (supplierId: number | null, coverDays: number) => call<{ created: number[] }>('/inventory/orders/from-needs', JB('POST', { supplierId, coverDays }))
+export const editPo = (id: number, b: object) => call<void>(`/inventory/orders/${id}`, JB('PUT', b))
+export const deletePo = (id: number) => call<void>(`/inventory/orders/${id}`, JB('DELETE'))
+export const poSent = (id: number) => call<void>(`/inventory/orders/${id}/sent`, JB('POST'))
+export const poReceive = (id: number, lines: { lineId: number; qty: number }[]) => call<void>(`/inventory/orders/${id}/receive`, JB('POST', { lines }))
+export const poCancel = (id: number) => call<void>(`/inventory/orders/${id}/cancel`, JB('POST'))
+export const stockCheck = (docId: number) => call<StockCheck>(`/inventory/document/${docId}`)

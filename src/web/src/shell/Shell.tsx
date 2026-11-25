@@ -16,6 +16,7 @@ import { LossTable, SpecialPricing } from '../windows/PricingWindows'
 import { ChangePassword, Cleanup, CompanyInfo, Groups, Users } from '../windows/AdminWindows'
 import { REPORT_MENU, ReportWindow } from '../windows/ReportWindow'
 import { AccountingWindow } from '../windows/AccountingWindow'
+import { InventoryWindow } from '../windows/InventoryWindow'
 import { CommandPalette } from './CommandPalette'
 import { UpdateBanner, UpdateDialog, useUpdates } from './UpdateBanner'
 import { Modal } from './ui'
@@ -23,7 +24,7 @@ import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string; min?: boolean; max?: boolean; x?: number; y?: number; z?: number }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report', accounting: 'Accounting (QuickBooks, Sage 50)' }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report', accounting: 'Accounting (QuickBooks, Sage 50)', inventory: 'Inventory & Ordering' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
 const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
 const sep = (): MenuItem => ({ label: '', sep: true })
@@ -148,7 +149,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
       { label: 'Company Information', kind: 'company', disabled: !can('company.write') }, ...soon('Enterprise Information'), { label: 'Reprint Document', kind: 'documents', disabled: !can('documents.read') },
       { label: 'Delete Options', children: [{ label: 'Delete (void) Payments', kind: 'receivables', disabled: !can('payments.void') }, { label: 'Delete (void) Deposits', kind: 'receivables', disabled: !can('payments.void') }, { label: 'Delete Inactive Customers', kind: 'cleanup', disabled: !can('utilities.cleanup') }, { label: 'Delete Quotes', kind: 'cleanup', disabled: !can('utilities.cleanup') }, { label: 'Void Invoice', kind: 'documents', disabled: !can('documents.void') }, { label: 'Void Work Order', kind: 'documents', disabled: !can('documents.void') }, { label: 'Void Credit Invoice', kind: 'documents', disabled: !can('documents.void') }, ...soon('Remove Finance Charges')] },
       { label: 'Invoice File', children: [{ label: 'Apply Credits', kind: 'receivables', disabled: !can('payments.write') }, { label: 'Edit Flat Glass Invoice', kind: 'documents', disabled: !can('invoices.write') }] },
-      ...when(can('pricing.manage'), [{ label: 'Perform Cost Increase / Supplier Pricing', kind: 'pricing' as Kind }]), ...when(can('transfer.manage'), [{ label: 'Import / Export Database', kind: 'transfer' as Kind }]), ...when(can('accounting.manage'), [{ label: 'Accounting (QuickBooks, Sage 50)…', kind: 'accounting' as Kind }]),
+      ...when(can('pricing.manage'), [{ label: 'Perform Cost Increase / Supplier Pricing', kind: 'pricing' as Kind }]), ...when(can('transfer.manage'), [{ label: 'Import / Export Database', kind: 'transfer' as Kind }]), ...when(can('accounting.manage'), [{ label: 'Accounting (QuickBooks, Sage 50)…', kind: 'accounting' as Kind }]), ...when(can('inventory.manage'), [{ label: 'Inventory & Ordering…', kind: 'inventory' as Kind }]),
       sep(), { label: 'Settings (time zone, devices)', kind: 'settings' },
     ],
     Reports: [
@@ -166,7 +167,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   if (!can('reports.view')) menus.Reports = lock(menus.Reports)
   const run = (i: MenuItem) => { if (i.disabled || i.children) return; setMenu(null); if (i.kind) open(i.kind, i.arg); i.action?.() }
   const commands = [{ label: 'Flat Glass Quote', kind: 'quote' as Kind }, { label: 'Customer Entry', kind: 'customer' as Kind }, { label: 'Payments / Receivables', kind: 'receivables' as Kind }, { label: 'Printer Setup', kind: 'printers' as Kind }, { label: 'Documents', kind: 'documents' as Kind },
-    { label: 'Tax Code Entry', kind: 'maint' as Kind, arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Knowledge Base (how to use)', kind: 'help' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : []), ...(can('accounting.manage') ? [{ label: 'Accounting (QuickBooks, Sage 50)', kind: 'accounting' as Kind }] : [])]
+    { label: 'Tax Code Entry', kind: 'maint' as Kind, arg: MAINT_TABLES.indexOf('tax-codes') }, { label: 'Knowledge Base (how to use)', kind: 'help' as Kind }, { label: 'Tax Group Entry', kind: 'taxgroups' as Kind }, { label: 'Settings', kind: 'settings' as Kind }, ...(me.isAdmin ? [{ label: 'Supplier Pricing', kind: 'pricing' as Kind }, { label: 'Import / Export Database', kind: 'transfer' as Kind }] : []), ...(can('accounting.manage') ? [{ label: 'Accounting (QuickBooks, Sage 50)', kind: 'accounting' as Kind }] : []), ...(can('inventory.manage') ? [{ label: 'Inventory & Ordering', kind: 'inventory' as Kind }] : [])]
 
   return (
     <ShellContext.Provider value={{ me, open, close, setTitle, refreshMe, toast }}>
@@ -241,6 +242,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'report' && <ReportWindow index={w.arg ?? 0} />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}
                     {w.kind === 'accounting' && <AccountingWindow />}
+                    {w.kind === 'inventory' && <InventoryWindow />}
                   </WinIdContext.Provider>
                 </div>
               </section>

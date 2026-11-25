@@ -208,3 +208,7 @@ fieldset.thick { margin: .6rem 0; padding: .4rem .6rem; border: 1px solid var(--
 .acct .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: .1rem 1.2rem; }
 .acct .field { flex-wrap: wrap; } .acct .field > span { width: 11rem; } .acct .field small { flex-basis: 100%; margin-left: 11.5rem; }
 .acct td.num, .acct th.num { text-align: right; }
+
+/* ---- inventory ---- */
+.inv h3 { margin: .9rem 0 .3rem; } .inv h4 { margin: .9rem 0 .2rem; } .inv .row { display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; margin: .45rem 0; }
+.inv .row button.on { background: var(--hover); border-color: var(--accent); } .inv tr.sel td { background: var(--hover); } .inv tbody tr { cursor: default; } .inv .neg, .neg { color: #b00020; }
