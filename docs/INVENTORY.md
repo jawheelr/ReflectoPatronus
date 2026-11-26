@@ -40,6 +40,17 @@ the program does not send email itself. Receiving (whole or partial) adds to sto
 ## Not covered
 Offcuts/remnants are not tracked, there is no per-location stock, and nothing is pushed to supplier systems.
 
+## Checking supplier stock (API or web page)
+
+Under **Suppliers & items**, pick a supplier and use "stock from the supplier" to ask it what it has. The answer is stored next to your own stock ("Supplier says", with how long ago it was asked) in the Stock list, the item panel and the needs list. It never changes your counts, prices or the suggested order; it is there so you can see that something is out before you order it.
+
+- **Its API:** JSON or CSV. Either one request returns a list (matched to your items by SKU), or put `{sku}` in the address and one request is made per counted item. Name the fields that hold the SKU and quantity (JSON paths like `data.available` work; a stock-text field such as "In Stock" / "Sold out" works when there is no number).
+- **Read a web page:** for suppliers with no API. Give a regular expression: a quantity pattern whose first group is the number (per item, with `{sku}` in the address), or a row pattern with the named groups `(?<sku>…)` and `(?<qty>…)` for a list page. Optional in-stock / out-of-stock patterns cover pages that only say "In Stock". Check the supplier's terms allow it.
+- **Try it** shows what a setup reads (and the start of the answer) without saving anything, so patterns can be tuned. **Check tracked items now** polls straight away; **Check every N hours** (or blank for manual only) polls on a schedule while inventory is on.
+- A quantity of 0 means out. A supplier answer with no quantity or status is "unknown", and so is an item missing from a list or a failed request (an old answer is never kept looking fresh). After 5 failed requests in a row a run stops.
+- Safety: https only; addresses on private networks, loopback and link-local (including cloud metadata) are refused; redirects are followed only to https; answers are capped at 10 MB; requests are spaced out and send a generic user agent only. The Authorization header is stored write-only and never shown again.
+- Through the API: `GET/PUT /inventory/suppliers/{id}/availability`, `POST /inventory/suppliers/{id}/availability/test` and `/poll`, `POST /inventory/items/{id}/poll`. `GET /inventory/items` and `/inventory/needs` carry `supplierStock` for each item.
+
 ## Using it from other software (API)
 
 Everything in the Inventory window is also a JSON API under `/api/v1/inventory`, so a purchasing system or script can add suppliers, import supplier items and read stock and needs.

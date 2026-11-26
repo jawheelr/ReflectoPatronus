@@ -15,6 +15,7 @@ var connectionString = builder.Configuration["Database:ConnectionString"]
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<DatabaseProbe>();
 builder.Services.AddHostedService<PricingScheduler>();
+builder.Services.AddHostedService<ReflectoPatronus.Api.Inventory.AvailabilityScheduler>();
 
 builder.Services.AddAuthentication(AuthDefaults.Scheme)
     .AddScheme<AuthenticationSchemeOptions, TokenAuthHandler>(AuthDefaults.Scheme, null);

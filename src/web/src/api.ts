@@ -361,11 +361,12 @@ export async function downloadAccounting(path: string, fallbackName: string) {
 }
 
 // ---- Inventory and purchasing ----
-export interface InvItem { id: number; supplierId: number; supplier: string; sku: string; description: string | null; unitCost: number; unit: string; reorderPoint: number; orderMultiple: number; leadDays: number; location: string | null; active: boolean; onHand: number; committed: number; quoted: number; onOrder: number; perDay: number; available: number; suggest: number }
-export interface InvNeed { id: number; supplierId: number; supplier: string; sku: string; description: string | null; unit: string; unitCost: number; onHand: number; committed: number; quoted: number; onOrder: number; perDay: number; reorderPoint: number; suggest: number; cost: number }
+export interface SupplierStockInfo { qty: number | null; status: 'in_stock' | 'out' | 'unknown'; note: string | null; checkedAt: string }
+export interface InvItem { id: number; supplierId: number; supplier: string; sku: string; description: string | null; unitCost: number; unit: string; reorderPoint: number; orderMultiple: number; leadDays: number; location: string | null; active: boolean; onHand: number; committed: number; quoted: number; onOrder: number; perDay: number; available: number; suggest: number; supplierStock: SupplierStockInfo | null }
+export interface InvNeed { id: number; supplierId: number; supplier: string; sku: string; description: string | null; unit: string; unitCost: number; onHand: number; committed: number; quoted: number; onOrder: number; perDay: number; reorderPoint: number; suggest: number; cost: number; supplierStock: SupplierStockInfo | null }
 export interface InvCatalogRow { supplierItemId: number; supplier: string; sku: string; description: string | null; unitCost: number; links: number; tracked: boolean; unit: string | null }
 export interface InvMove { at: string; qty: number; kind: string; note: string | null; user: string | null; document: string | null; poId: number | null }
-export interface InvSupplier { id: number; name: string; email: string | null; phone: string | null; orderNotes: string | null; active: boolean; items: number }
+export interface InvSupplier { id: number; name: string; email: string | null; phone: string | null; orderNotes: string | null; active: boolean; items: number; availMode: 'none' | 'api' | 'scrape'; availLastAt: string | null; availStatus: string | null }
 export interface InvImportRow { sku: string; description?: string | null; cost?: number | null; unit?: string | null; onHand?: number | null; reorderPoint?: number | null; orderMultiple?: number | null }
 export interface InvImportResult { added: number; changed: number; unchanged: number; tracked: number; skipped: number; problems: string[]; priceChanges: number }
 export interface PoRow { id: number; supplier: string; status: string; createdAt: string; sentAt: string | null; expectedDate: string | null; lines: number; total: number }
@@ -396,3 +397,16 @@ export const poCancel = (id: number) => call<void>(`/inventory/orders/${id}/canc
 export const stockCheck = (docId: number) => call<StockCheck>(`/inventory/document/${docId}`)
 export const addInvSupplier = (b: object) => call<{ id: number }>('/inventory/suppliers', JB('POST', b))
 export const saveInvSupplierItems = (id: number, rows: InvImportRow[], track: boolean) => call<InvImportResult>(`/inventory/suppliers/${id}/items`, JB('POST', { rows, track }))
+
+// Supplier stock availability (API or web page)
+export interface AvailConfig { mode: 'none' | 'api' | 'scrape'; url: string | null; hasAuthHeader: boolean; format: 'json' | 'csv' | 'html'; map: Record<string, string>; refreshHours: number | null; perSku: boolean
+  status: { lastAt: string | null; lastStatus: string | null; lastMessage: string | null; known: number } }
+export interface AvailInput { mode: string; url: string; authHeader?: string; clearAuth?: boolean; format: string; map: Record<string, string>; refreshHours: number | null; sku?: string }
+export interface AvailFound { sku: string | null; qty: number | null; status: 'in_stock' | 'out' | 'unknown'; note: string | null }
+export interface AvailTest { sku: string | null; length: number; total?: number; found: AvailFound[]; snippet: string }
+export interface AvailPoll { checked: number; inStock: number; out: number; unknown: number; message: string }
+export const getAvail = (supplierId: number) => call<AvailConfig>(`/inventory/suppliers/${supplierId}/availability`)
+export const saveAvail = (supplierId: number, b: AvailInput) => call<void>(`/inventory/suppliers/${supplierId}/availability`, JB('PUT', b))
+export const testAvail = (supplierId: number, b: AvailInput) => call<AvailTest>(`/inventory/suppliers/${supplierId}/availability/test`, JB('POST', b))
+export const pollSupplierStock = (supplierId: number) => call<AvailPoll>(`/inventory/suppliers/${supplierId}/availability/poll`, { method: 'POST' })
+export const pollItemStock = (itemId: number) => call<AvailPoll>(`/inventory/items/${itemId}/poll`, { method: 'POST' })

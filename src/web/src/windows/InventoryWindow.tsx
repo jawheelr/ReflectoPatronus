@@ -7,6 +7,13 @@ import { useShell } from '../shell/WindowContext'
 const TABS = ['Stock', 'Needs & ordering', 'Purchase orders', 'Suppliers & items']
 const n = (x: number) => (Math.round(x * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+const ago = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)); return m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago` }
+/** What the supplier last said it had, with when we asked. */
+function SupplierSays({ s }: { s: api.SupplierStockInfo | null }) {
+  if (!s) return <span className="muted">—</span>
+  const text = s.status === 'out' ? 'Out' : s.qty != null ? n(s.qty) : s.status === 'in_stock' ? 'In stock' : '?'
+  return <span className={s.status === 'out' ? 'neg' : s.status === 'unknown' ? 'muted' : ''} title={`${s.note ? s.note + '. ' : ''}Checked ${ago(s.checkedAt)}`}>{text} <small className="muted">{ago(s.checkedAt)}</small></span>
+}
 const poNo = (id: number) => `PO-${String(id).padStart(5, '0')}`
 
 /** Inventory and purchasing. Off until an administrator switches it on; while off nothing in the program touches stock. */
@@ -52,11 +59,11 @@ function StockTab({ tick, bump }: { tick: number; bump: () => void }) {
       <p className="muted">Open work orders set stock aside (<strong>committed</strong>); it leaves stock when the work order becomes an invoice. Open quotes count as expected demand in the needs estimate.</p>
       <div className="row"><input className="search" placeholder="Find an item…" value={q} onChange={e => setQ(e.target.value)} /><button className="primary" onClick={() => setAdding(true)}>Track a supplier item</button></div>
       <div className="maint-list">
-        <table className="grid-table"><thead><tr><th>Supplier</th><th>SKU</th><th>Description</th><th>Where</th><th className="num">On hand</th><th className="num">Committed</th><th className="num">Available</th><th className="num">On order</th><th>Unit</th></tr></thead>
+        <table className="grid-table"><thead><tr><th>Supplier</th><th>SKU</th><th>Description</th><th>Where</th><th className="num">On hand</th><th className="num">Committed</th><th className="num">Available</th><th className="num">On order</th><th className="num">Supplier says</th><th>Unit</th></tr></thead>
           <tbody>{shown.map(r => <tr key={r.id} className={(sel?.id === r.id ? 'sel ' : '') + (!r.active ? 'muted' : '')} onClick={() => setSel(r)}>
             <td>{r.supplier}</td><td>{r.sku}</td><td>{r.description}</td><td>{r.location}</td><td className="num">{n(r.onHand)}</td><td className="num">{n(r.committed)}</td>
-            <td className={'num' + (r.available < 0 ? ' neg' : '')}>{n(r.available)}</td><td className="num">{n(r.onOrder)}</td><td>{r.unit}</td></tr>)}
-            {shown.length === 0 && <tr><td colSpan={9} className="muted">{rows.length ? 'No match.' : 'Nothing is tracked yet. Choose “Track a supplier item”.'}</td></tr>}</tbody></table>
+            <td className={'num' + (r.available < 0 ? ' neg' : '')}>{n(r.available)}</td><td className="num">{n(r.onOrder)}</td><td className="num"><SupplierSays s={r.supplierStock} /></td><td>{r.unit}</td></tr>)}
+            {shown.length === 0 && <tr><td colSpan={10} className="muted">{rows.length ? 'No match.' : 'Nothing is tracked yet. Choose “Track a supplier item”.'}</td></tr>}</tbody></table>
       </div>
       {sel && <ItemPanel key={sel.id} item={sel} done={bump} />}
       {adding && <AddItem onClose={() => setAdding(false)} done={() => { setAdding(false); bump() }} />}
@@ -72,6 +79,8 @@ function ItemPanel({ item, done }: { item: api.InvItem; done: () => void }) {
   const run = async (fn: () => Promise<unknown>, ok: string) => { try { await fn(); toast(ok); done() } catch (e) { toast((e as Error).message, 'error') } }
   return (
     <fieldset><legend>{item.sku} — {item.supplier}</legend>
+      <div className="row"><span>Supplier says: <SupplierSays s={item.supplierStock} /></span>
+        <button onClick={() => run(async () => { const r = await api.pollItemStock(item.id); if (r.unknown) throw new Error(r.message) }, 'Checked with the supplier.')}>Check with supplier now</button></div>
       <div className="row">
         <label>Counted now <input size={7} value={count} onChange={e => setCount(e.target.value)} /></label>
         <button disabled={count === '' || isNaN(Number(count))} onClick={() => run(() => api.adjustInvItem(item.id, { setTo: Number(count), note }), 'Count saved.').then(() => setCount(''))}>Set count</button>
@@ -139,8 +148,8 @@ function NeedsTab({ bump, go }: { bump: () => void; go: () => void }) {
       {bySupplier.length === 0 && <p className="muted">Nothing needs ordering right now.</p>}
       {bySupplier.map(s => <div key={s.id}>
         <h4>{s.name} <button onClick={() => void make(s.id)}>Make draft order</button></h4>
-        <table className="grid-table"><thead><tr><th>SKU</th><th>Description</th><th className="num">On hand</th><th className="num">Work orders</th><th className="num">Quotes</th><th className="num">Per day</th><th className="num">On order</th><th className="num">Order</th><th className="num">Cost</th></tr></thead>
-          <tbody>{s.rows.map(r => <tr key={r.id}><td>{r.sku}</td><td>{r.description}</td><td className="num">{n(r.onHand)}</td><td className="num">{n(r.committed)}</td><td className="num">{n(r.quoted)}</td><td className="num">{n(r.perDay)}</td><td className="num">{n(r.onOrder)}</td><td className="num"><strong>{n(r.suggest)} {r.unit}</strong></td><td className="num">{money(r.cost)}</td></tr>)}</tbody></table></div>)}
+        <table className="grid-table"><thead><tr><th>SKU</th><th>Description</th><th className="num">On hand</th><th className="num">Work orders</th><th className="num">Quotes</th><th className="num">Per day</th><th className="num">On order</th><th className="num">Order</th><th className="num">Supplier says</th><th className="num">Cost</th></tr></thead>
+          <tbody>{s.rows.map(r => <tr key={r.id}><td>{r.sku}</td><td>{r.description}</td><td className="num">{n(r.onHand)}</td><td className="num">{n(r.committed)}</td><td className="num">{n(r.quoted)}</td><td className="num">{n(r.perDay)}</td><td className="num">{n(r.onOrder)}</td><td className="num"><strong>{n(r.suggest)} {r.unit}</strong></td><td className="num"><SupplierSays s={r.supplierStock} /></td><td className="num">{money(r.cost)}</td></tr>)}</tbody></table></div>)}
     </>)
 }
 
@@ -341,9 +350,9 @@ function SuppliersTab({ bump }: { bump: () => void }) {
     <>
       <p>Add the companies you buy from, then load their items (SKU, description, cost) by typing them in or importing a spreadsheet. Items you load can be counted in inventory and ordered from here.</p>
       <div className="row"><button className="primary" onClick={() => setForm('new')}>Add a supplier</button></div>
-      <table className="grid-table"><thead><tr><th>Supplier</th><th>Order email</th><th>Phone</th><th className="num">Items</th><th /></tr></thead>
-        <tbody>{rows.map(s => <tr key={s.id} className={(sel === s.id ? 'sel ' : '') + (!s.active ? 'muted' : '')} onClick={() => setSel(s.id)}><td>{s.name}{!s.active && ' (hidden)'}</td><td>{s.email}</td><td>{s.phone}</td><td className="num">{s.items}</td><td><button onClick={e => { e.stopPropagation(); setForm(s) }}>Edit</button></td></tr>)}
-          {rows.length === 0 && <tr><td colSpan={5} className="muted">No suppliers yet. Choose “Add a supplier”.</td></tr>}</tbody></table>
+      <table className="grid-table"><thead><tr><th>Supplier</th><th>Order email</th><th>Phone</th><th className="num">Items</th><th>Stock source</th><th /></tr></thead>
+        <tbody>{rows.map(s => <tr key={s.id} className={(sel === s.id ? 'sel ' : '') + (!s.active ? 'muted' : '')} onClick={() => setSel(s.id)}><td>{s.name}{!s.active && ' (hidden)'}</td><td>{s.email}</td><td>{s.phone}</td><td className="num">{s.items}</td><td>{s.availMode === "none" ? <span className="muted">none</span> : (s.availMode === "api" ? "API" : "Web page") + (s.availStatus === "error" ? " (failing)" : "")}</td><td><button onClick={e => { e.stopPropagation(); setForm(s) }}>Edit</button></td></tr>)}
+          {rows.length === 0 && <tr><td colSpan={6} className="muted">No suppliers yet. Choose “Add a supplier”.</td></tr>}</tbody></table>
       {cur && <fieldset><legend>{cur.name}: items</legend>
         <div className="row"><label>SKU <input size={14} value={it.sku} onChange={e => setIt({ ...it, sku: e.target.value })} /></label><label>Description <input size={26} value={it.description} onChange={e => setIt({ ...it, description: e.target.value })} /></label>
           <label>Cost <input size={8} value={it.cost} onChange={e => setIt({ ...it, cost: e.target.value })} /></label><label>Unit <input size={7} placeholder="sheet" value={it.unit} onChange={e => setIt({ ...it, unit: e.target.value })} /></label>
@@ -355,7 +364,61 @@ function SuppliersTab({ bump }: { bump: () => void }) {
             {items.length === 0 && <tr><td colSpan={5} className="muted">No items yet. Add one above or import a file.</td></tr>}</tbody></table></div>
         <p className="muted small">To have glass and parts used up automatically, link each part and thickness to its item under Supplier Pricing → Cost links.</p>
       </fieldset>}
+      {cur && <AvailSetup key={cur.id} supplier={cur} done={refresh} />}
       {form && <SupplierForm s={form === 'new' ? null : form} onClose={() => setForm(null)} done={id => { setForm(null); if (id) setSel(id); refresh() }} />}
       {importing && cur && <ImportItems supplier={cur} onClose={() => setImporting(false)} done={refresh} />}
     </>)
+}
+
+const FIELDS_BY: Record<string, { key: string; label: string; hint?: string; wide?: boolean }[]> = {
+  'json-list': [{ key: 'sku', label: 'SKU field', hint: 'sku' }, { key: 'qty', label: 'Quantity field', hint: 'qty' }, { key: 'status', label: 'Stock text field (optional)' }, { key: 'rows', label: 'List is at (optional)', hint: 'items or data.products' }],
+  'csv-list': [{ key: 'sku', label: 'SKU column', hint: 'sku' }, { key: 'qty', label: 'Quantity column', hint: 'qty' }, { key: 'status', label: 'Stock text column (optional)' }],
+  'json-one': [{ key: 'qty', label: 'Quantity at', hint: 'data.available' }, { key: 'status', label: 'or stock text at', hint: 'data.status' }],
+  'html-one': [{ key: 'qtyPattern', label: 'Quantity pattern', hint: 'Available:\\s*([\\d,]+)', wide: true }, { key: 'inPattern', label: 'In-stock pattern (optional)', hint: 'In Stock', wide: true }, { key: 'outPattern', label: 'Out-of-stock pattern (optional)', hint: 'Out of Stock|Sold Out', wide: true }],
+  'html-list': [{ key: 'rowPattern', label: 'Row pattern', hint: '<td>(?<sku>[^<]+)</td>\\s*<td>(?<qty>[\\d,]+)</td>', wide: true }, { key: 'inPattern', label: 'In-stock pattern (optional)', wide: true }, { key: 'outPattern', label: 'Out-of-stock pattern (optional)', wide: true }],
+}
+
+/** Where a supplier's stock comes from: its API (JSON or CSV) or a web page. Only records what the supplier says; never changes our counts or prices. */
+function AvailSetup({ supplier, done }: { supplier: api.InvSupplier; done: () => void }) {
+  const { toast, me } = useShell()
+  const [cfg, setCfg] = useState<api.AvailConfig | null>(null)
+  const [mode, setMode] = useState<string>('none'); const [url, setUrl] = useState(''); const [auth, setAuth] = useState(''); const [clearAuth, setClearAuth] = useState(false)
+  const [format, setFormat] = useState('json'); const [map, setMap] = useState<Record<string, string>>({}); const [hours, setHours] = useState(''); const [sku, setSku] = useState('')
+  const [test, setTest] = useState<api.AvailTest | null>(null); const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false)
+  const load = useCallback(() => api.getAvail(supplier.id).then(c => { setCfg(c); setMode(c.mode); setUrl(c.url ?? ''); setFormat(c.format); setMap(c.map as Record<string, string>); setHours(c.refreshHours ? String(c.refreshHours) : ''); setAuth(''); setClearAuth(false) }).catch(e => toast((e as Error).message, 'error')), [supplier.id, toast])
+  useEffect(() => { void load() }, [load])
+  if (!cfg) return null
+  const perSku = url.toLowerCase().includes('{sku}')
+  const fmt = mode === 'scrape' ? 'html' : format === 'html' ? 'json' : format
+  const fields = FIELDS_BY[`${fmt}-${perSku ? 'one' : 'list'}`] ?? []
+  const input = (): api.AvailInput => ({ mode, url, authHeader: auth || undefined, clearAuth, format: fmt, map: Object.fromEntries(Object.entries(map).filter(([k, v]) => v.trim() && (fields.some(f => f.key === k)))), refreshHours: hours ? Number(hours) : null, sku: sku || undefined })
+  const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) } }
+  const save = () => run(async () => { await api.saveAvail(supplier.id, input()); toast('Saved.'); await load(); done() })
+  const tryIt = () => run(async () => { setTest(await api.testAvail(supplier.id, input())) })
+  const check = () => run(async () => { const r = await api.pollSupplierStock(supplier.id); setMsg(r.message); toast('Checked.'); await load(); done() })
+  const st = cfg.status
+  return (
+    <fieldset><legend>{supplier.name}: stock from the supplier</legend>
+      <p className="muted small">Ask the supplier what it has in stock, from its API or by reading a web page. It shows next to your own stock and in the needs list; it never changes your counts or prices. Only https addresses on the public internet are allowed. If you read web pages, make sure the supplier's terms allow it.</p>
+      <div className="row"><label>Source <select value={mode} onChange={e => { setMode(e.target.value); setTest(null) }}><option value="none">Not used</option><option value="api">Its API (JSON or CSV)</option><option value="scrape">Read a web page</option></select></label>
+        {mode === 'api' && <label>Answer is <select value={fmt} onChange={e => setFormat(e.target.value)}><option value="json">JSON</option><option value="csv">CSV</option></select></label>}
+        {mode !== 'none' && <label>Check every <input size={4} value={hours} placeholder="manual" onChange={e => setHours(e.target.value)} /> hours</label>}</div>
+      {mode !== 'none' && <>
+        <div className="row"><label style={{ flex: 1 }}>Address <input style={{ width: '34rem' }} value={url} placeholder="https://supplier.example/api/stock?sku={sku}" onChange={e => setUrl(e.target.value)} /></label></div>
+        <p className="muted small">{perSku ? 'One request per tracked item: {sku} is replaced with the item’s SKU.' : 'One request returns the whole list; rows are matched to your items by SKU. Add {sku} to the address to ask item by item instead.'}</p>
+        <div className="row"><label>Authorization header <input type="password" size={28} autoComplete="off" placeholder={cfg.hasAuthHeader ? 'set (leave blank to keep)' : 'Bearer …'} value={auth} onChange={e => setAuth(e.target.value)} /></label>
+          {cfg.hasAuthHeader && <label className="check"><input type="checkbox" checked={clearAuth} onChange={e => setClearAuth(e.target.checked)} /> remove it</label>}</div>
+        <div className="row" style={{ flexWrap: 'wrap' }}>{fields.map(f => <label key={f.key} style={f.wide ? { flexBasis: '100%' } : undefined}>{f.label} <input style={{ width: f.wide ? '34rem' : undefined }} size={f.wide ? 40 : 16} placeholder={f.hint} value={map[f.key] ?? ''} onChange={e => setMap({ ...map, [f.key]: e.target.value })} /></label>)}</div>
+        {fmt === 'html' && <p className="muted small">Patterns are regular expressions, matched without regard to case. In a quantity pattern the first group is the number; in a row pattern name the groups <code>(?&lt;sku&gt;…)</code> and <code>(?&lt;qty&gt;…)</code>.</p>}
+      </>}
+      <div className="row"><button className="primary" disabled={busy} onClick={() => void save()}>Save</button>
+        {mode !== 'none' && <><label>Try with SKU <input size={12} value={sku} placeholder={perSku ? 'first item' : ''} onChange={e => setSku(e.target.value)} disabled={!perSku} /></label>
+          <button disabled={busy || !url} onClick={() => void tryIt()}>Try it (saves nothing)</button></>}
+        {cfg.mode !== 'none' && <button disabled={busy} onClick={() => void check()}>Check tracked items now</button>}</div>
+      {test && <div className="muted small"><div>Read {test.length.toLocaleString()} characters{test.total != null ? `, ${test.total} rows` : ''}. Result:</div>
+        <table className="grid-table"><thead><tr><th>SKU</th><th className="num">Quantity</th><th>Status</th><th>Note</th></tr></thead><tbody>{test.found.map((f, i) => <tr key={i}><td>{f.sku}</td><td className="num">{f.qty ?? ''}</td><td>{f.status}</td><td>{f.note}</td></tr>)}
+          {test.found.length === 0 && <tr><td colSpan={4}>Nothing matched. Start of the answer:</td></tr>}</tbody></table>
+        <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '8rem', overflow: 'auto' }}>{test.snippet}</pre></div>}
+      {(msg || st.lastAt) && <p className="small"><strong>{st.lastStatus === 'error' ? 'Last check failed' : 'Last check'}</strong> {st.lastAt ? instant(st.lastAt, me.timeZone) : ''}: {msg || st.lastMessage}</p>}
+    </fieldset>)
 }

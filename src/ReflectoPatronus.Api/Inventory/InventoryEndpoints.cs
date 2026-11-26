@@ -44,7 +44,7 @@ public static class InventoryEndpoints
         var h = g.MapGroup("").RequirePermission("inventory.manage");
         h.AddEndpointFilter(async (ctx, next) => await Stock.IsOn(ctx.HttpContext.RequestServices.GetRequiredService<NpgsqlDataSource>(), ctx.HttpContext.RequestAborted)
             ? await next(ctx) : Results.Json(new { error = "Inventory is turned off. Turn it on in the Inventory window first." }, statusCode: 409));
-        h.MapGet("/items", async (NpgsqlDataSource db, CancellationToken ct) => Results.Ok((await Snapshot(db, 14, ct)).Select(Row)));
+        h.MapGet("/items", async (NpgsqlDataSource db, CancellationToken ct) => { var sup = await SupplierStock(db, ct); return Results.Ok((await Snapshot(db, 14, ct)).Select(s => Row(s, sup))); });
         h.MapGet("/catalog", Catalog);
         h.MapPost("/items", AddItem);
         h.MapPut("/items/{id:int}", EditItem);
@@ -55,6 +55,7 @@ public static class InventoryEndpoints
         h.MapPost("/suppliers", AddSupplier);
         h.MapPut("/suppliers/{id:int}", SaveSupplier);
         h.MapPost("/suppliers/{id:int}/items", SaveSupplierItems);
+        Availability.Map(h);
         h.MapGet("/orders", Orders);
         h.MapGet("/orders/{id:int}", GetOrder);
         h.MapPost("/orders", CreateOrder);
@@ -138,8 +139,19 @@ public static class InventoryEndpoints
         return list;
     }
 
-    static object Row(Snap s) => new
+    /// <summary>What each supplier last said it had (supplier_stock), by inventory item id.</summary>
+    static async Task<Dictionary<int, object>> SupplierStock(NpgsqlDataSource db, CancellationToken ct)
     {
+        var map = new Dictionary<int, object>();
+        await using var c = db.CreateCommand("SELECT i.id, ss.qty, ss.status, ss.note, ss.checked_at FROM supplier_stock ss JOIN inventory_item i ON i.supplier_item_id = ss.supplier_item_id");
+        await using var r = await c.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) map[r.GetInt32(0)] = new { qty = D(r, 1), status = r.GetString(2), note = D(r, 3), checkedAt = r.GetDateTime(4) };
+        return map;
+    }
+
+    static object Row(Snap s, Dictionary<int, object> sup) => new
+    {
+        supplierStock = sup.GetValueOrDefault(s.Id),
         id = s.Id, supplierId = s.SupplierId, supplier = s.Supplier, sku = s.Sku, description = s.Description, unitCost = s.UnitCost, unit = s.Unit,
         reorderPoint = s.ReorderPoint, orderMultiple = s.Multiple, leadDays = s.LeadDays, location = s.Location, active = s.Active,
         onHand = s.OnHand, committed = s.Committed, quoted = s.Quoted, onOrder = s.OnOrder, perDay = s.Daily, available = s.OnHand - s.Committed, suggest = s.Suggest,
@@ -149,7 +161,8 @@ public static class InventoryEndpoints
     {
         var cover = Math.Clamp(coverDays ?? 14, 0, 365);
         var rows = (await Snapshot(db, cover, ct)).Where(s => s.Active && s.Suggest > 0).ToList();
-        return Results.Ok(new { coverDays = cover, items = rows.Select(s => new { id = s.Id, supplierId = s.SupplierId, supplier = s.Supplier, sku = s.Sku, description = s.Description, unit = s.Unit, unitCost = s.UnitCost,
+        var sup = await SupplierStock(db, ct);
+        return Results.Ok(new { coverDays = cover, items = rows.Select(s => new { supplierStock = sup.GetValueOrDefault(s.Id), id = s.Id, supplierId = s.SupplierId, supplier = s.Supplier, sku = s.Sku, description = s.Description, unit = s.Unit, unitCost = s.UnitCost,
             onHand = s.OnHand, committed = s.Committed, quoted = s.Quoted, onOrder = s.OnOrder, perDay = s.Daily, reorderPoint = s.ReorderPoint, suggest = s.Suggest, cost = Math.Round(s.Suggest * s.UnitCost, 2) }) });
     }
 
@@ -256,9 +269,9 @@ public static class InventoryEndpoints
 
     static async Task<IResult> Suppliers(NpgsqlDataSource db, CancellationToken ct)
     {
-        await using var c = db.CreateCommand("SELECT id, name, email, phone, order_notes, active, (SELECT count(*) FROM supplier_item i WHERE i.supplier_id = supplier.id) FROM supplier ORDER BY NOT active, lower(name)");
+        await using var c = db.CreateCommand("SELECT id, name, email, phone, order_notes, active, (SELECT count(*) FROM supplier_item i WHERE i.supplier_id = supplier.id), avail_mode, avail_last_at, avail_status FROM supplier ORDER BY NOT active, lower(name)");
         var list = new List<object>(); await using var r = await c.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct)) list.Add(new { id = r.GetInt32(0), name = r.GetString(1), email = D(r, 2), phone = D(r, 3), orderNotes = D(r, 4), active = r.GetBoolean(5), items = r.GetInt64(6) });
+        while (await r.ReadAsync(ct)) list.Add(new { id = r.GetInt32(0), name = r.GetString(1), email = D(r, 2), phone = D(r, 3), orderNotes = D(r, 4), active = r.GetBoolean(5), items = r.GetInt64(6), availMode = r.GetString(7), availLastAt = D(r, 8), availStatus = D(r, 9) });
         return Results.Ok(list);
     }
 

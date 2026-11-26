@@ -156,7 +156,7 @@ public static class PricingService
         return result;
     }
 
-    static List<List<string>> Csv(string s)
+    internal static List<List<string>> Csv(string s)
     {
         var rows = new List<List<string>>(); var row = new List<string>(); var f = new StringBuilder(); var q = false;
         s = s.TrimStart('﻿');
@@ -181,7 +181,7 @@ public static class PricingService
 
     // ---- feed fetching (SSRF-guarded) ---------------------------------------------------------------------------
 
-    static readonly HttpClient Http = new(new SocketsHttpHandler
+    internal static readonly HttpClient Http = new(new SocketsHttpHandler
     {
         AllowAutoRedirect = false,
         ConnectTimeout = TimeSpan.FromSeconds(10),
