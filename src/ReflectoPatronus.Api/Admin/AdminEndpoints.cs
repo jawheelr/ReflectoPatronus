@@ -96,7 +96,7 @@ public static class AdminEndpoints
         await using var c = db.CreateCommand("""
             SELECT u.id, u.code, u.name, u.active, u.is_admin, u.password_hash IS NOT NULL, u.locked_until,
                    (SELECT count(*) FROM device_session s WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.refresh_expires_at > now())
-            FROM app_user u ORDER BY u.active DESC, (u.password_hash IS NOT NULL) DESC, lower(u.code)
+            FROM app_user u WHERE NOT u.is_service ORDER BY u.active DESC, (u.password_hash IS NOT NULL) DESC, lower(u.code)
             """);
         var l2 = new List<UserRow>(); await using var r = await c.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) l2.Add(new(r.GetInt16(0), r.GetString(1), CustomerEndpoints.Str(r, 2), r.GetBoolean(3), r.GetBoolean(4), r.GetBoolean(5), r.IsDBNull(6) ? null : r.GetDateTime(6), (int)r.GetInt64(7), groups.GetValueOrDefault(r.GetInt16(0)) ?? []));
@@ -152,7 +152,7 @@ public static class AdminEndpoints
         if (id == me.UserId() && !i.Active) return Conflict("You cannot deactivate yourself.");
         await using var cn = await db.OpenConnectionAsync(ct);
         await using var tx = await cn.BeginTransactionAsync(ct);
-        await using (var c = new NpgsqlCommand("UPDATE app_user SET name = $2, active = $3 WHERE id = $1", cn, tx))
+        await using (var c = new NpgsqlCommand("UPDATE app_user SET name = $2, active = $3 WHERE id = $1 AND NOT is_service", cn, tx))
         { c.Parameters.AddWithValue(id); c.Parameters.Add(P(N(i.Name), NpgsqlDbType.Text)); c.Parameters.AddWithValue(i.Active); if (await c.ExecuteNonQueryAsync(ct) == 0) return Results.NotFound(); }
         if (id == me.UserId())   // you may not take your own administrator rights away
         {
@@ -258,7 +258,7 @@ public static class AdminEndpoints
     static async Task<IResult> ResetPassword(int id, PasswordReset r, ClaimsPrincipal me, NpgsqlDataSource db, CancellationToken ct)
     {
         if (CheckPassword(r.Password) is { } e) return Bad(e);
-        await using (var c = db.CreateCommand("SELECT 1 FROM app_user WHERE id = $1")) { c.Parameters.AddWithValue(id); if (await c.ExecuteScalarAsync(ct) is null) return Results.NotFound(); }
+        await using (var c = db.CreateCommand("SELECT 1 FROM app_user WHERE id = $1 AND NOT is_service")) { c.Parameters.AddWithValue(id); if (await c.ExecuteScalarAsync(ct) is null) return Results.NotFound(); }
         await SetPassword(db, id, r.Password!, id == me.UserId() ? me.SessionId() : null, ct);
         return Results.NoContent();
     }

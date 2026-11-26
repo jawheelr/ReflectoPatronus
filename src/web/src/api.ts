@@ -314,6 +314,15 @@ export const createGroup = (g: { name: string; description: string | null; permi
 export const updateGroup = (id: number, g: { name: string; description: string | null; permissions: string[] }) => call<void>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(g) })
 export const deleteGroup = (id: number) => call<void>(`/groups/${id}`, { method: 'DELETE' })
 
+// API clients (OAuth client credentials for other software)
+export interface ApiClient { id: string; clientId: string; name: string; note: string | null; active: boolean; groupIds: number[]; createdAt: string; secretRotatedAt: string; expiresAt: string | null; lastUsedAt: string | null; tokens: number }
+export interface ApiClientInput { name: string; note: string | null; groupIds: number[]; active: boolean; expiresAt: string | null }
+export const getApiClients = () => call<ApiClient[]>('/api-clients')
+export const createApiClient = (c: ApiClientInput) => call<{ id: string; clientId: string; clientSecret: string }>('/api-clients', { method: 'POST', body: JSON.stringify(c) })
+export const updateApiClient = (id: string, c: ApiClientInput) => call<void>(`/api-clients/${id}`, { method: 'PUT', body: JSON.stringify(c) })
+export const rotateApiClientSecret = (id: string) => call<{ clientSecret: string }>(`/api-clients/${id}/secret`, { method: 'POST' })
+export const deleteApiClient = (id: string) => call<void>(`/api-clients/${id}`, { method: 'DELETE' })
+
 // Updates (administrators)
 export interface UpdateStatus { mode: 'docker' | 'lxc' | 'other'; current: string | null; currentShort: string | null; latest: string | null; latestShort: string | null; latestMessage: string | null; latestDate: string | null; latestUrl: string | null
   available: boolean; canCompare: boolean; commitsBehind: number | null; checkedAt: string | null; error: string | null; dismissed: boolean; enabled: boolean; repository: string; branch: string; commands: string[]

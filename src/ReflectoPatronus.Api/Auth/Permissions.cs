@@ -35,6 +35,11 @@ public static class Permissions
     {
         if (ctx.Items[ItemKey] is HashSet<string> cached) return cached;
         var set = await Load(ctx.RequestServices.GetRequiredService<NpgsqlDataSource>(), ctx.User.UserId(), ctx.RequestAborted);
+        if (ctx.User.FindFirstValue(AuthDefaults.ScopeClaim) is { } scope)   // an API token that asked for fewer permissions than its client has
+        {
+            var asked = scope.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+            set = set.Contains(All) ? asked : set.Where(asked.Contains).ToHashSet();
+        }
         ctx.Items[ItemKey] = set; return set;
     }
 

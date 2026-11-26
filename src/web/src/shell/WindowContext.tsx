@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Me } from '../api'
 
-export type Kind = 'customer' | 'quote' | 'documents' | 'settings' | 'taxcodes' | 'taxgroups' | 'pricing' | 'transfer' | 'maint' | 'help' | 'receivables' | 'printers' | 'catalog' | 'loss' | 'special' | 'company' | 'password' | 'users' | 'groups' | 'cleanup' | 'report' | 'accounting' | 'inventory'
+export type Kind = 'customer' | 'quote' | 'documents' | 'settings' | 'taxcodes' | 'taxgroups' | 'pricing' | 'transfer' | 'maint' | 'help' | 'receivables' | 'printers' | 'catalog' | 'loss' | 'special' | 'company' | 'password' | 'users' | 'groups' | 'cleanup' | 'report' | 'accounting' | 'inventory' | 'apiclients'
 export interface Shell {
   me: Me
   /** Open (or focus) a window. `arg` is a customer id or document id; omitted = a blank entry window. */

@@ -10,6 +10,8 @@ public static class AuthDefaults
 {
     public const string Scheme = "DeviceToken";
     public const string SessionClaim = "sid";
+    public const string ClientClaim = "cid";     // present when the caller is an API client (OAuth client credentials), not a person
+    public const string ScopeClaim = "scope";    // the permissions an API token was narrowed to
 }
 
 /// <summary>Validates "Authorization: Bearer &lt;token&gt;" against device_session (not revoked, not expired, user active).</summary>
@@ -31,7 +33,10 @@ sealed class TokenAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> optio
         cmd.Parameters.AddWithValue(hash);
         await using var r = await cmd.ExecuteReaderAsync(Context.RequestAborted);
         if (!await r.ReadAsync(Context.RequestAborted))
-            return AuthenticateResult.Fail("Invalid or expired token.");
+        {
+            await r.CloseAsync();
+            return await ClientToken(hash);
+        }
 
         var boundTo = r.IsDBNull(5) ? null : r.GetString(5);
         if (boundTo is not null && !string.Equals(boundTo, GatewayGuard.Fingerprint(Context), StringComparison.Ordinal))
@@ -52,6 +57,30 @@ sealed class TokenAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> optio
             touch.Parameters.AddWithValue(sessionId);
             await touch.ExecuteNonQueryAsync(Context.RequestAborted);
         }
+        var identity = new ClaimsIdentity(claims, Scheme.Name);
+        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));
+    }
+
+    /// <summary>An OAuth client-credentials token (api_token): acts as the client's service account, with the client's group permissions
+    /// (narrowed to the token's scope, if it asked for fewer). Never bound to a device certificate.</summary>
+    async Task<AuthenticateResult> ClientToken(byte[] hash)
+    {
+        await using var cmd = db.CreateCommand("""
+            SELECT u.id, u.code, c.id, t.scope
+            FROM api_token t JOIN api_client c ON c.id = t.client_id JOIN app_user u ON u.id = c.user_id
+            WHERE t.access_hash = $1 AND t.expires_at > now() AND u.active AND (c.expires_at IS NULL OR c.expires_at > now())
+            """);
+        cmd.Parameters.AddWithValue(hash);
+        await using var r = await cmd.ExecuteReaderAsync(Context.RequestAborted);
+        if (!await r.ReadAsync(Context.RequestAborted))
+            return AuthenticateResult.Fail("Invalid or expired token.");
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, r.GetInt16(0).ToString()),
+            new(ClaimTypes.Name, r.GetString(1)),
+            new(AuthDefaults.ClientClaim, r.GetGuid(2).ToString()),
+        };
+        if (!r.IsDBNull(3)) claims.Add(new Claim(AuthDefaults.ScopeClaim, r.GetString(3)));
         var identity = new ClaimsIdentity(claims, Scheme.Name);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));
     }

@@ -68,6 +68,7 @@ app.MapGet("/health/ready", async (DatabaseProbe db, CancellationToken ct) =>
 
 var api = app.MapGroup("/api/v1");
 AuthEndpoints.Map(api);
+ApiClients.Map(api);
 MeEndpoints.Map(api);
 CustomerEndpoints.Map(api);
 DocumentEndpoints.Map(api);

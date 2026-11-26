@@ -39,3 +39,35 @@ the program does not send email itself. Receiving (whole or partial) adds to sto
 
 ## Not covered
 Offcuts/remnants are not tracked, there is no per-location stock, and nothing is pushed to supplier systems.
+
+## Using it from other software (API)
+
+Everything in the Inventory window is also a JSON API under `/api/v1/inventory`, so a purchasing system or script can add suppliers, import supplier items and read stock and needs.
+
+1. Make a group with just **Inventory, stock counts and purchase orders** (File → Groups), then a client in that group (File → API Clients (OAuth)). Copy the client ID and secret when they are shown.
+2. Get a one-hour token (see `docs/API.md`, "API clients"):
+
+```
+TOKEN=$(curl -s https://HOST/api/v1/auth/token -d grant_type=client_credentials \
+  -d client_id=rpc_… -d client_secret=rps_… | jq -r .access_token)
+```
+
+3. Call the API with `Authorization: Bearer $TOKEN`:
+
+```
+# add a supplier
+curl -s -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"name":"Acme Glass","email":"orders@acme.example"}' https://HOST/api/v1/inventory/suppliers
+
+# import or update that supplier's items (matched by SKU); "track" also starts counting them
+curl -s -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"track":true,"rows":[{"sku":"CL-18","description":"Clear 1/8","cost":52.5,"unit":"sheet","onHand":4,"reorderPoint":2,"orderMultiple":1}]}' \
+  https://HOST/api/v1/inventory/suppliers/1/items
+
+# what is on hand, and what to order
+curl -s -H "Authorization: Bearer $TOKEN" https://HOST/api/v1/inventory/items
+curl -s -H "Authorization: Bearer $TOKEN" 'https://HOST/api/v1/inventory/needs?coverDays=14'
+```
+
+Inventory must be switched on (otherwise these routes answer 409). The routes are listed in `src/ReflectoPatronus.Api/Inventory/InventoryEndpoints.cs`; the machine-readable contract is at `/openapi/v1.json` in Development.
+

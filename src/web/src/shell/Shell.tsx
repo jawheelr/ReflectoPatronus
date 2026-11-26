@@ -13,7 +13,7 @@ import { Receivables } from '../windows/Receivables'
 import { PrinterSetup } from '../windows/PrinterSetup'
 import { CatalogEditor } from '../windows/CatalogEditor'
 import { LossTable, SpecialPricing } from '../windows/PricingWindows'
-import { ChangePassword, Cleanup, CompanyInfo, Groups, Users } from '../windows/AdminWindows'
+import { ApiClients, ChangePassword, Cleanup, CompanyInfo, Groups, Users } from '../windows/AdminWindows'
 import { REPORT_MENU, ReportWindow } from '../windows/ReportWindow'
 import { AccountingWindow } from '../windows/AccountingWindow'
 import { InventoryWindow } from '../windows/InventoryWindow'
@@ -24,7 +24,7 @@ import { ShellContext, WinIdContext, type Kind } from './WindowContext'
 
 interface Win { id: string; kind: Kind; arg?: number; title: string; min?: boolean; max?: boolean; x?: number; y?: number; z?: number }
 interface Toast { id: number; message: string; kind: 'ok' | 'error' }
-const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report', accounting: 'Accounting (QuickBooks, Sage 50)', inventory: 'Inventory & Ordering' }
+const TITLES: Record<Kind, string> = { customer: 'Customer Entry', quote: 'Quote', documents: 'Documents', settings: 'Settings', taxcodes: 'Tax Code Entry', taxgroups: 'Tax Group Entry', pricing: 'Supplier Pricing', transfer: 'Import / Export Database', maint: 'Maintenance', help: 'Knowledge Base', receivables: 'Receivables', printers: 'Printer Setup', catalog: 'Catalog', loss: 'Lossage Table', special: 'Customer Special Pricing', company: 'Company Information', password: 'Change Password', users: 'User Profiles', groups: 'Groups', cleanup: 'Delete Options', report: 'Report', accounting: 'Accounting (QuickBooks, Sage 50)', inventory: 'Inventory & Ordering', apiclients: 'API Clients' }
 interface MenuItem { label: string; kind?: Kind; arg?: number; action?: () => void; disabled?: boolean; note?: string; children?: MenuItem[]; sep?: boolean }
 const soon = (...labels: string[]): MenuItem[] => labels.map(label => ({ label, disabled: true }))
 const sep = (): MenuItem => ({ label: '', sep: true })
@@ -137,7 +137,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
   const when = (ok: boolean, items: MenuItem[]) => (ok ? items : [])
   const menus: Record<string, MenuItem[]> = {
     File: [{ label: 'Log Out', action: signOut }, { label: 'Close Window', action: () => active && close(active), disabled: !active },
-      { label: 'Printer Setup…', kind: 'printers' }, { label: 'Change Password', kind: 'password' }, { label: 'User Profiles', kind: 'users', disabled: !can('users.manage') }, { label: 'Groups (roles)', kind: 'groups', disabled: !can('users.manage') }, { label: 'Appearance', children: themeItems }],
+      { label: 'Printer Setup…', kind: 'printers' }, { label: 'Change Password', kind: 'password' }, { label: 'User Profiles', kind: 'users', disabled: !can('users.manage') }, { label: 'Groups (roles)', kind: 'groups', disabled: !can('users.manage') }, { label: 'API Clients (OAuth)', kind: 'apiclients', disabled: !can('users.manage') }, { label: 'Appearance', children: themeItems }],
     Daily: [{ label: 'Flat Glass Quote', kind: 'quote', disabled: !can('quotes.write', 'documents.read') }, { label: 'Payment / Receivables', kind: 'receivables', disabled: !can('receivables.read') }, { label: 'Documents', kind: 'documents', disabled: !can('documents.read') }],
     Maintenance: [
       { label: 'Accounts', children: [{ label: 'Customers', kind: 'customer', disabled: !can('customers.read') }, { label: 'Customer Categories', kind: 'maint', arg: MAINT_TABLES.indexOf('customer-categories') }, { label: 'Customer Special Pricing', kind: 'special', disabled: !can('customers.read') }, ...soon('Vendor Entry')] },
@@ -238,6 +238,7 @@ export function Shell({ me, onSignOut, refreshMe }: { me: api.Me; onSignOut: () 
                     {w.kind === 'password' && <ChangePassword />}
                     {w.kind === 'users' && <Users />}
                     {w.kind === 'groups' && <Groups />}
+                    {w.kind === 'apiclients' && <ApiClients />}
                     {w.kind === 'cleanup' && <Cleanup />}
                     {w.kind === 'report' && <ReportWindow index={w.arg ?? 0} />}
                     {w.kind === 'taxgroups' && <TaxGroupEntry />}

@@ -5,6 +5,26 @@ Base path `/api/v1`. The machine-readable contract is [docs/openapi/v1.json](ope
 ## Authentication (per device)
 - `POST /auth/login` `{userCode, password, deviceName, platform}` (platform: `web|desktop|ios|ipados|other`) returns an access token (15 min) and refresh token (30 days) bound to **one device session**.
 - Send `Authorization: Bearer <accessToken>`. Tokens are opaque 256-bit values; only their SHA-256 is stored.
+## API clients (OAuth 2.0 client credentials)
+
+For other software (a website, a purchasing system, a script) that should not use a person's password. Create one in the console under **File → API Clients (OAuth)** (needs `users.manage`), or with `POST /api-clients`.
+
+- A client is a **service account**: it cannot sign in, and it can do what the **groups** you give it allow (same permissions as people). Administrators and any group holding `users.manage` are refused, so a client can never mint more credentials.
+- The **client ID** (`rpc_…`) is permanent; the **client secret** (`rps_…`) is shown **once** and only its SHA-256 is stored. **New secret** replaces it; the old secret and every token made with it stop working immediately. A client can also be switched off, given an expiry date, or deleted.
+- Get a token (valid 1 hour, opaque, stored hashed), then send it as `Authorization: Bearer <access_token>` like any other token:
+
+```
+curl -s https://HOST/api/v1/auth/token \
+  -d grant_type=client_credentials -d client_id=rpc_… -d client_secret=rps_…
+# {"access_token":"…","token_type":"Bearer","expires_in":3600,"scope":null}
+```
+
+  Credentials may also be sent as HTTP Basic (`client_id:client_secret`), or as a JSON body with the same field names. Errors follow RFC 6749: `invalid_client` (401), `unsupported_grant_type`, `invalid_scope` (400).
+- Optional `scope`: a space-separated list of permission keys (for example `inventory.manage`) to narrow one token to **fewer** permissions than the client has. Asking for one the client lacks is `invalid_scope`.
+- Client management routes: `GET/POST /api-clients`, `PUT/DELETE /api-clients/{id}`, `POST /api-clients/{id}/secret`.
+- Behind the device-certificate gateway, client tokens are not certificate-bound; keep the secret as private as a password.
+
+
 - `POST /auth/refresh` `{refreshToken}` rotates both tokens; the old refresh token stops working immediately.
 - `POST /auth/logout` ends the current session. `GET /me/sessions` lists your signed-in devices; `DELETE /me/sessions/{id}` revokes one (a lost laptop or iPad) without affecting the others.
 - Every endpoint requires sign-in except `auth/login`, `auth/refresh` and `/health/*`. 5 failed logins lock the account for 15 minutes; failures for unknown users, bad passwords and locked accounts are indistinguishable.

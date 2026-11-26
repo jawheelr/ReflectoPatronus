@@ -199,3 +199,81 @@ export function Groups() {
     </>
   )
 }
+
+/** Credentials for other software (OAuth 2.0 client credentials). The secret is shown once, when it is made or replaced. */
+export function ApiClients() {
+  const { me, toast } = useShell()
+  const [clients, setClients] = useState<api.ApiClient[]>([]); const [groups, setGroups] = useState<api.GroupRow[]>([])
+  const [sel, setSel] = useState<string | 'new' | null>(null)
+  const [name, setName] = useState(''); const [note, setNote] = useState(''); const [gids, setGids] = useState<number[]>([]); const [active, setActive] = useState(true); const [expires, setExpires] = useState('')
+  const [dirty, setDirty] = useState(false); const [error, setError] = useState('')
+  const [shown, setShown] = useState<{ title: string; clientId: string; secret: string } | null>(null)
+  const load = () => api.getApiClients().then(setClients).catch(e => setError(e.message))
+  useEffect(() => { void load(); api.getGroups().then(setGroups).catch(() => {}) }, [])
+  if (!api.can(me, 'users.manage')) return <div className="form"><p>You do not have permission to manage API clients.</p></div>
+  const c = clients.find(x => x.id === sel)
+  const usable = groups.filter(g => !g.locked && !g.permissions.includes('users.manage'))
+  const url = `${window.location.origin}/api/v1/auth/token`
+  const choose = (x: api.ApiClient | 'new') => {
+    if (dirty && !window.confirm('Discard your unsaved changes?')) return
+    setError(''); setDirty(false)
+    if (x === 'new') { setSel('new'); setName(''); setNote(''); setGids([]); setActive(true); setExpires('') }
+    else { setSel(x.id); setName(x.name); setNote(x.note ?? ''); setGids(x.groupIds); setActive(x.active); setExpires(x.expiresAt ? x.expiresAt.slice(0, 10) : '') }
+  }
+  const body = (): api.ApiClientInput => ({ name, note: note || null, groupIds: gids, active, expiresAt: expires ? new Date(expires + 'T23:59:59').toISOString() : null })
+  async function save() {
+    try {
+      if (sel === 'new') { const r = await api.createApiClient(body()); await load(); setSel(r.id); setShown({ title: 'API client created', clientId: r.clientId, secret: r.clientSecret }) }
+      else if (c) { await api.updateApiClient(c.id, body()); await load(); toast('Saved.') }
+      setDirty(false); setError('')
+    } catch (e) { setError((e as Error).message) }
+  }
+  async function rotate() {
+    if (!c || !window.confirm(`Make a new secret for "${c.name}"? The old secret stops working immediately, and so does every token made with it.`)) return
+    try { const r = await api.rotateApiClientSecret(c.id); await load(); setShown({ title: 'New secret', clientId: c.clientId, secret: r.clientSecret }) } catch (e) { setError((e as Error).message) }
+  }
+  async function remove() {
+    if (!c || !window.confirm(`Delete the API client "${c.name}"? Anything using it stops working.`)) return
+    try { await api.deleteApiClient(c.id); setSel(null); setDirty(false); await load(); toast('API client deleted.') } catch (e) { setError((e as Error).message) }
+  }
+  const copy = (t: string) => { void navigator.clipboard?.writeText(t); toast('Copied.') }
+  return (
+    <>
+      <Toolbar tools={[{ label: 'Save', icon: 'save', onClick: save, disabled: !dirty || !name.trim() || gids.length === 0 }, { label: 'New client', icon: 'clear', onClick: () => choose('new') },
+        { label: 'New secret', icon: 'notes', onClick: rotate, disabled: !c, title: 'Replace the secret; the old one stops working at once' }, { label: 'Delete', icon: 'delete', onClick: remove, disabled: !c }]} />
+      {error && <p className="formerr">{error}</p>}
+      <div className="maint wide">
+        <div className="maint-list"><table className="grid-table"><thead><tr><th>Client</th><th>Last used</th></tr></thead>
+          <tbody>{clients.map(x => <tr key={x.id} className={x.id === sel ? 'sel' : ''} onClick={() => choose(x)} style={{ cursor: 'pointer' }}>
+            <td>{x.name}{!x.active && <small className="muted"> off</small>}</td><td>{x.lastUsedAt ? instant(x.lastUsedAt, me.timeZone) : <span className="muted">never</span>}</td></tr>)}</tbody></table>
+          {clients.length === 0 && <p className="muted small" style={{ padding: '0.5rem' }}>No API clients yet.</p>}</div>
+        <div className="maint-form">
+          {sel == null && <>
+            <p className="muted">An API client lets other software (a website, a purchasing system, a script) use ReflectoPatronus without a person's password. Choose a client, or click New client.</p>
+            <p className="small">Token address: <code>{url}</code> <button type="button" onClick={() => copy(url)}>Copy</button></p></>}
+          {sel != null && <>
+            <Field label="Name"><input value={name} maxLength={60} placeholder="What uses this? e.g. Purchasing system" onChange={e => { setName(e.target.value); setDirty(true) }} style={{ width: '24rem' }} /></Field>
+            <Field label="Note"><input value={note} maxLength={200} onChange={e => { setNote(e.target.value); setDirty(true) }} style={{ width: '30rem' }} /></Field>
+            {c && <Field label="Client ID"><input readOnly value={c.clientId} style={{ width: '24rem' }} onFocus={e => e.target.select()} /> <button type="button" onClick={() => copy(c.clientId)}>Copy</button></Field>}
+            <Field label="Active"><input type="checkbox" checked={active} onChange={e => { setActive(e.target.checked); setDirty(true) }} /> {active ? 'On' : 'Off: it cannot get tokens'}</Field>
+            <Field label="Secret expires"><input type="date" value={expires} onChange={e => { setExpires(e.target.value); setDirty(true) }} /> <small className="muted">{expires ? '' : 'Never'}</small></Field>
+            <fieldset className="thick"><legend>What it may do (groups)</legend>
+              {usable.map(g => <label key={g.id} className="chk" title={g.description ?? ''}><input type="checkbox" checked={gids.includes(g.id)} onChange={e => { setGids(h => e.target.checked ? [...h, g.id] : h.filter(k => k !== g.id)); setDirty(true) }} /> {g.name}</label>)}
+              <p className="muted small">Same groups as people. For supplier and stock work, make a group with only "Inventory, stock counts and purchase orders" (Groups), and pick it here. Administrators and groups that manage users cannot be used.</p></fieldset>
+            {c && <p className="small muted">Created {instant(c.createdAt, me.timeZone)}. Secret made {instant(c.secretRotatedAt, me.timeZone)}. {c.tokens} token{c.tokens === 1 ? '' : 's'} in use.</p>}
+          </>}
+        </div>
+      </div>
+      {shown && <Modal title={shown.title} onClose={() => setShown(null)} width={640}>
+        <div className="form">
+          <p><b>Copy the secret now.</b> It is not stored and cannot be shown again; if it is lost, make a new one.</p>
+          <Field label="Client ID"><input readOnly value={shown.clientId} style={{ width: '26rem' }} onFocus={e => e.target.select()} /> <button type="button" onClick={() => copy(shown.clientId)}>Copy</button></Field>
+          <Field label="Client secret"><input readOnly value={shown.secret} style={{ width: '26rem' }} onFocus={e => e.target.select()} /> <button type="button" onClick={() => copy(shown.secret)}>Copy</button></Field>
+          <p className="small">Get a token (valid one hour), then send it as <code>Authorization: Bearer …</code>:</p>
+          <pre style={{ whiteSpace: 'pre-wrap', userSelect: 'all', fontSize: '0.8em' }}>{`curl -s ${url} \\\n  -d grant_type=client_credentials \\\n  -d client_id=${shown.clientId} \\\n  -d client_secret=${shown.secret}`}</pre>
+          <p style={{ textAlign: 'right' }}><button type="button" onClick={() => setShown(null)}>I have copied it</button></p>
+        </div>
+      </Modal>}
+    </>
+  )
+}

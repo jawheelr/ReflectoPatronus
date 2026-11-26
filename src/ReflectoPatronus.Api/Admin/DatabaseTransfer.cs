@@ -11,13 +11,13 @@ namespace ReflectoPatronus.Api.Admin;
 /// Whole-database export and import (administrators only).
 /// File format (.rpb): gzip of UTF-8 lines. Line 1 "#rp-export\t{header json}"; then "table\t{row json}" per row in
 /// foreign-key order; last line "#end\t{row counts}" (an upload without it is rejected as truncated).
-/// Never exported: sessions (device_session), schema_migrations, password hashes, admin flags, feed credentials.
+/// Never exported: sessions (device_session), API clients and their tokens, schema_migrations, password hashes, admin flags, feed credentials.
 /// Users are never overwritten or wiped by an import; missing users are added without a password.
 /// </summary>
 public static class DatabaseTransfer
 {
     const int FormatVersion = 1;
-    static readonly HashSet<string> NotTransferred = ["schema_migrations", "device_session", "app_group", "group_permission", "user_group", "system_state"];   // access rules belong to the server, not to the data;
+    static readonly HashSet<string> NotTransferred = ["schema_migrations", "device_session", "api_client", "api_token", "app_group", "group_permission", "user_group", "system_state"];   // access rules belong to the server, not to the data;
     static readonly HashSet<string> KeepAlways = ["app_user", "user_permission"];
     static readonly Dictionary<string, string[]> Strip = new()
     {
