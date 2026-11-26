@@ -21,11 +21,11 @@ public static class PricingService
         foreach (var row in rows.GroupBy(r => r.Sku.Trim(), StringComparer.OrdinalIgnoreCase).Select(g => g.Last()))
         {
             await using var up = new NpgsqlCommand("""
-                SELECT id, unit_cost FROM supplier_item WHERE supplier_id = $1 AND lower(sku) = lower($2) FOR UPDATE
+                SELECT id, unit_cost, description FROM supplier_item WHERE supplier_id = $1 AND lower(sku) = lower($2) FOR UPDATE
                 """, conn, tx);
             up.Parameters.AddWithValue(supplierId); up.Parameters.AddWithValue(row.Sku.Trim());
-            int? id = null; decimal old = 0;
-            await using (var r = await up.ExecuteReaderAsync(ct)) { if (await r.ReadAsync(ct)) { id = r.GetInt32(0); old = r.GetDecimal(1); } }
+            int? id = null; decimal old = 0; string? oldDesc = null;
+            await using (var r = await up.ExecuteReaderAsync(ct)) { if (await r.ReadAsync(ct)) { id = r.GetInt32(0); old = r.GetDecimal(1); oldDesc = r.IsDBNull(2) ? null : r.GetString(2); } }
             if (id is null)
             {
                 await using var ins = new NpgsqlCommand("INSERT INTO supplier_item (supplier_id, sku, description, unit_cost) VALUES ($1,$2,$3,$4) RETURNING id", conn, tx);
@@ -40,6 +40,11 @@ public static class PricingService
                 upd.Parameters.AddWithValue(id.Value); upd.Parameters.AddWithValue(row.Cost); upd.Parameters.AddWithValue((object?)row.Description ?? DBNull.Value);
                 await upd.ExecuteNonQueryAsync(ct); changed++;
                 await History(conn, tx, id.Value, row.Cost, source, ct);
+            }
+            else if (row.Description is { Length: > 0 } && row.Description != oldDesc)
+            {   // same cost, new wording: update the description only (no cost history, no price proposal)
+                await using var upd = new NpgsqlCommand("UPDATE supplier_item SET description = $2 WHERE id = $1", conn, tx);
+                upd.Parameters.AddWithValue(id.Value); upd.Parameters.AddWithValue(row.Description); await upd.ExecuteNonQueryAsync(ct); changed++;
             }
             else same++;
         }

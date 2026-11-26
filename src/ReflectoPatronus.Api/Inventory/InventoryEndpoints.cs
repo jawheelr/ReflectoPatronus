@@ -8,7 +8,9 @@ namespace ReflectoPatronus.Api.Inventory;
 public record InvStatusBody(bool On);
 public record ItemBody(int? SupplierItemId, string? Unit, decimal? ReorderPoint, decimal? OrderMultiple, int? LeadDays, string? Location, bool? Active, decimal? OnHand);
 public record AdjustBody(decimal? Qty, decimal? SetTo, string? Note);
-public record SupplierContactBody(string? Email, string? Phone, string? OrderNotes);
+public record SupplierContactBody(string? Email, string? Phone, string? OrderNotes, string? Name = null, bool? Active = null);
+public record SupplierItemRow(string? Sku, string? Description, decimal? Cost, string? Unit, decimal? OnHand, decimal? ReorderPoint, decimal? OrderMultiple);
+public record SupplierItemsBody(List<SupplierItemRow>? Rows, bool? Track);
 public record PoLineBody(int ItemId, decimal Qty);
 public record PoBody(int? SupplierId, string? Note, string? ExpectedDate, List<PoLineBody>? Lines);
 public record ReceiveLine(int LineId, decimal Qty);
@@ -50,7 +52,9 @@ public static class InventoryEndpoints
         h.MapGet("/items/{id:int}/moves", Moves);
         h.MapGet("/needs", Needs);
         h.MapGet("/suppliers", Suppliers);
+        h.MapPost("/suppliers", AddSupplier);
         h.MapPut("/suppliers/{id:int}", SaveSupplier);
+        h.MapPost("/suppliers/{id:int}/items", SaveSupplierItems);
         h.MapGet("/orders", Orders);
         h.MapGet("/orders/{id:int}", GetOrder);
         h.MapPost("/orders", CreateOrder);
@@ -149,17 +153,18 @@ public static class InventoryEndpoints
             onHand = s.OnHand, committed = s.Committed, quoted = s.Quoted, onOrder = s.OnOrder, perDay = s.Daily, reorderPoint = s.ReorderPoint, suggest = s.Suggest, cost = Math.Round(s.Suggest * s.UnitCost, 2) }) });
     }
 
-    static async Task<IResult> Catalog(string? q, NpgsqlDataSource db, CancellationToken ct)
+    static async Task<IResult> Catalog(string? q, int? supplierId, NpgsqlDataSource db, CancellationToken ct)
     {
         await using var c = db.CreateCommand("""
-            SELECT si.id, s.name, si.sku, si.description, si.unit_cost, (SELECT count(*) FROM part_cost_source p WHERE p.supplier_item_id = si.id), i.id IS NOT NULL
+            SELECT si.id, s.name, si.sku, si.description, si.unit_cost, (SELECT count(*) FROM part_cost_source p WHERE p.supplier_item_id = si.id), i.id IS NOT NULL, i.unit
             FROM supplier_item si JOIN supplier s ON s.id = si.supplier_id LEFT JOIN inventory_item i ON i.supplier_item_id = si.id
-            WHERE $1::text IS NULL OR si.sku ILIKE $1 OR si.description ILIKE $1 OR s.name ILIKE $1
-            ORDER BY (i.id IS NOT NULL), lower(s.name), lower(si.sku) LIMIT 100
+            WHERE ($1::text IS NULL OR si.sku ILIKE $1 OR si.description ILIKE $1 OR s.name ILIKE $1) AND ($2::int IS NULL OR s.id = $2)
+            ORDER BY CASE WHEN $2::int IS NULL THEN (i.id IS NOT NULL)::int ELSE 0 END, lower(s.name), lower(si.sku) LIMIT 500
             """);
         c.Parameters.AddWithValue(string.IsNullOrWhiteSpace(q) ? DBNull.Value : "%" + Customers.CustomerEndpoints.EscapeLike(q.Trim()) + "%");
+        c.Parameters.AddWithValue((object?)supplierId ?? DBNull.Value);
         var list = new List<object>(); await using var r = await c.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct)) list.Add(new { supplierItemId = r.GetInt32(0), supplier = r.GetString(1), sku = r.GetString(2), description = D(r, 3), unitCost = r.GetDecimal(4), links = r.GetInt64(5), tracked = r.GetBoolean(6) });
+        while (await r.ReadAsync(ct)) list.Add(new { supplierItemId = r.GetInt32(0), supplier = r.GetString(1), sku = r.GetString(2), description = D(r, 3), unitCost = r.GetDecimal(4), links = r.GetInt64(5), tracked = r.GetBoolean(6), unit = D(r, 7) });
         return Results.Ok(list);
     }
 
@@ -251,18 +256,97 @@ public static class InventoryEndpoints
 
     static async Task<IResult> Suppliers(NpgsqlDataSource db, CancellationToken ct)
     {
-        await using var c = db.CreateCommand("SELECT id, name, email, phone, order_notes FROM supplier WHERE active ORDER BY lower(name)");
+        await using var c = db.CreateCommand("SELECT id, name, email, phone, order_notes, active, (SELECT count(*) FROM supplier_item i WHERE i.supplier_id = supplier.id) FROM supplier ORDER BY NOT active, lower(name)");
         var list = new List<object>(); await using var r = await c.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct)) list.Add(new { id = r.GetInt32(0), name = r.GetString(1), email = D(r, 2), phone = D(r, 3), orderNotes = D(r, 4) });
+        while (await r.ReadAsync(ct)) list.Add(new { id = r.GetInt32(0), name = r.GetString(1), email = D(r, 2), phone = D(r, 3), orderNotes = D(r, 4), active = r.GetBoolean(5), items = r.GetInt64(6) });
         return Results.Ok(list);
+    }
+
+    static IResult? CheckContact(SupplierContactBody b)
+        => b.Email is { Length: > 0 } e && (e.Length > 200 || !e.Contains('@') || e.Any(char.IsWhiteSpace)) ? Bad("That does not look like an email address.")
+         : b.Name is { } n && (n.Trim().Length == 0 || n.Length > 120) ? Bad("The supplier needs a name (up to 120 characters).") : null;
+
+    static async Task<IResult> AddSupplier(SupplierContactBody b, NpgsqlDataSource db, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(b.Name)) return Bad("Give the supplier a name.");
+        if (CheckContact(b) is { } bad) return bad;
+        await using var c = db.CreateCommand("INSERT INTO supplier (name, source_type, email, phone, order_notes) VALUES ($1, 'manual', nullif($2, ''), nullif($3, ''), nullif($4, '')) RETURNING id");
+        c.Parameters.AddWithValue(b.Name.Trim()); c.Parameters.AddWithValue((object?)b.Email?.Trim() ?? ""); c.Parameters.AddWithValue((object?)b.Phone?.Trim() ?? ""); c.Parameters.AddWithValue((object?)b.OrderNotes?.Trim() ?? "");
+        try { return Results.Ok(new { id = (int)(await c.ExecuteScalarAsync(ct))! }); }
+        catch (PostgresException e) when (e.SqlState == "23505") { return Results.Conflict(new { error = "A supplier with that name already exists." }); }
     }
 
     static async Task<IResult> SaveSupplier(int id, SupplierContactBody b, NpgsqlDataSource db, CancellationToken ct)
     {
-        if (b.Email is { Length: > 0 } e && (e.Length > 200 || !e.Contains('@') || e.Any(char.IsWhiteSpace))) return Bad("That does not look like an email address.");
-        await using var c = db.CreateCommand("UPDATE supplier SET email = nullif($2, ''), phone = nullif($3, ''), order_notes = nullif($4, '') WHERE id = $1");
+        if (CheckContact(b) is { } bad) return bad;
+        await using var c = db.CreateCommand("UPDATE supplier SET name = coalesce(nullif($5, ''), name), active = coalesce($6, active), email = nullif($2, ''), phone = nullif($3, ''), order_notes = nullif($4, '') WHERE id = $1");
         c.Parameters.AddWithValue(id); c.Parameters.AddWithValue((object?)b.Email?.Trim() ?? ""); c.Parameters.AddWithValue((object?)b.Phone?.Trim() ?? ""); c.Parameters.AddWithValue((object?)b.OrderNotes?.Trim() ?? "");
-        return await c.ExecuteNonQueryAsync(ct) > 0 ? Results.NoContent() : Results.NotFound();
+        c.Parameters.AddWithValue((object?)b.Name?.Trim() ?? ""); c.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Boolean, Value = (object?)b.Active ?? DBNull.Value });
+        try { return await c.ExecuteNonQueryAsync(ct) > 0 ? Results.NoContent() : Results.NotFound(); }
+        catch (PostgresException e) when (e.SqlState == "23505") { return Results.Conflict(new { error = "A supplier with that name already exists." }); }
+    }
+
+    /// <summary>
+    /// Adds or updates supplier items (SKU, description, cost) in one go, from a typed-in row or an imported file. A blank cost keeps the old cost (0 for a new item).
+    /// Cost changes go through the normal supplier pricing path, so they are kept in the cost history and may propose selling price changes for you to approve.
+    /// With Track, every row also starts being counted in inventory (existing counts are left alone).
+    /// </summary>
+    static async Task<IResult> SaveSupplierItems(int id, SupplierItemsBody b, ClaimsPrincipal user, NpgsqlDataSource db, CancellationToken ct)
+    {
+        if (b.Rows is not { Count: > 0 }) return Bad("There is nothing to add.");
+        if (b.Rows.Count > 20000) return Bad("Up to 20,000 items at a time.");
+        var rows = new List<SupplierItemRow>(); var problems = new List<string>(); var n = 0;
+        foreach (var r in b.Rows)
+        {
+            n++;
+            if (string.IsNullOrWhiteSpace(r.Sku) || r.Sku.Trim().Length > 120) { problems.Add($"row {n}: the SKU is missing or too long"); continue; }
+            if (r.Cost is < 0 || r.OnHand is < 0 || r.ReorderPoint is < 0 || r.OrderMultiple is <= 0) { problems.Add($"row {n} ({r.Sku}): a number is negative (or the multiple is zero)"); continue; }
+            rows.Add(r with { Sku = r.Sku.Trim(), Description = string.IsNullOrWhiteSpace(r.Description) ? null : r.Description.Trim(), Unit = string.IsNullOrWhiteSpace(r.Unit) ? null : r.Unit.Trim() });
+        }
+        if (rows.Count == 0) return Bad("No usable rows. " + string.Join("; ", problems.Take(5)));
+        var rowsBySku = rows.GroupBy(r => r.Sku!, StringComparer.OrdinalIgnoreCase).Select(g => g.Last()).ToList();
+        var existing = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        await using (var c = db.CreateCommand("SELECT sku, unit_cost FROM supplier_item WHERE supplier_id = $1"))
+        {
+            c.Parameters.AddWithValue(id); await using var r = await c.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) existing[r.GetString(0)] = r.GetDecimal(1);
+        }
+        if (!await Exists(db, id, ct)) return Results.NotFound();
+        var res = await Pricing.PricingService.IngestAsync(db, id, rowsBySku.Select(r => new Pricing.CostRow(r.Sku!, r.Description, r.Cost ?? (existing.TryGetValue(r.Sku!, out var old) ? old : 0))).ToList(), "upload", ct);
+        int tracked = 0;
+        if (b.Track == true)
+        {
+            await using var cn = await db.OpenConnectionAsync(ct); await using var tx = await cn.BeginTransactionAsync(ct);
+            foreach (var r in rowsBySku)
+            {
+                int? itemId;
+                await using (var c = new NpgsqlCommand("""
+                    INSERT INTO inventory_item (supplier_item_id, unit, reorder_point, order_multiple)
+                    SELECT si.id, coalesce($3, 'each'), coalesce($4, 0), coalesce($5, 1) FROM supplier_item si WHERE si.supplier_id = $1 AND lower(si.sku) = lower($2)
+                    ON CONFLICT (supplier_item_id) DO NOTHING RETURNING id
+                    """, cn, tx))
+                {
+                    c.Parameters.AddWithValue(id); c.Parameters.AddWithValue(r.Sku!); c.Parameters.AddWithValue((object?)r.Unit ?? DBNull.Value);
+                    c.Parameters.AddWithValue((object?)r.ReorderPoint ?? DBNull.Value); c.Parameters.AddWithValue((object?)r.OrderMultiple ?? DBNull.Value);
+                    itemId = await c.ExecuteScalarAsync(ct) as int?;
+                }
+                if (itemId is null) continue;
+                tracked++;
+                if (r.OnHand is > 0)
+                {
+                    await using var m = new NpgsqlCommand("INSERT INTO inventory_move (item_id, qty, kind, note, user_id) VALUES ($1, $2, 'count', 'Starting count (import)', $3)", cn, tx);
+                    m.Parameters.AddWithValue(itemId.Value); m.Parameters.AddWithValue(r.OnHand.Value); m.Parameters.AddWithValue((short)user.UserId()); await m.ExecuteNonQueryAsync(ct);
+                }
+            }
+            await tx.CommitAsync(ct);
+        }
+        return Results.Ok(new { added = res.Added, changed = res.Changed, unchanged = res.Unchanged, tracked, skipped = problems.Count, problems = problems.Take(5), priceChanges = res.PriceChanges });
+    }
+
+    static async Task<bool> Exists(NpgsqlDataSource db, int id, CancellationToken ct)
+    {
+        await using var c = db.CreateCommand("SELECT 1 FROM supplier WHERE id = $1"); c.Parameters.AddWithValue(id);
+        return await c.ExecuteScalarAsync(ct) is not null;
     }
 
     // ---------- purchase orders ----------

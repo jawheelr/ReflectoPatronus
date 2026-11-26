@@ -4,7 +4,7 @@ import { instant, money } from '../format'
 import { Modal, Tabs } from '../shell/ui'
 import { useShell } from '../shell/WindowContext'
 
-const TABS = ['Stock', 'Needs & ordering', 'Purchase orders', 'Suppliers']
+const TABS = ['Stock', 'Needs & ordering', 'Purchase orders', 'Suppliers & items']
 const n = (x: number) => (Math.round(x * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 const poNo = (id: number) => `PO-${String(id).padStart(5, '0')}`
@@ -36,7 +36,7 @@ export function InventoryWindow() {
       {tab === TABS[0] && <StockTab tick={tick} bump={bump} />}
       {tab === TABS[1] && <NeedsTab bump={bump} go={() => setTab(TABS[2])} />}
       {tab === TABS[2] && <OrdersTab tick={tick} bump={bump} />}
-      {tab === TABS[3] && <SuppliersTab />}
+      {tab === TABS[3] && <SuppliersTab bump={bump} />}
       <hr />{switchBox}
     </div>)
 }
@@ -229,19 +229,133 @@ function NewOrder({ onClose, done }: { onClose: () => void; done: (id: number) =
     </Modal>)
 }
 
-function SuppliersTab() {
+/** Small CSV reader (quotes, commas and line breaks inside quotes; tab or semicolon files are detected from the first line). */
+function parseCsv(text: string): string[][] {
+  text = text.replace(/^﻿/, '')
+  const first = text.split(/\r?\n/, 1)[0] ?? ''
+  const sep = [',', '\t', ';'].map(c => [c, first.split(c).length] as const).sort((a, b) => b[1] - a[1])[0]![0]
+  const rows: string[][] = []; let row: string[] = []; let f = ''; let q = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++ } else q = false } else f += ch }
+    else if (ch === '"') q = true
+    else if (ch === sep) { row.push(f); f = '' }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(f); f = ''; if (row.some(x => x.trim())) rows.push(row); row = [] }
+    else f += ch
+  }
+  row.push(f); if (row.some(x => x.trim())) rows.push(row)
+  return rows
+}
+const FIELDS: { key: keyof api.InvImportRow; label: string; guess: RegExp }[] = [
+  { key: 'sku', label: 'SKU / item number', guess: /^(sku|item\s*(no|num|number|#|code)?|part\s*(no|num|number|#)?|product\s*(code|no)?|code)$/i },
+  { key: 'description', label: 'Description', guess: /desc|name|title/i },
+  { key: 'cost', label: 'Cost', guess: /cost|price|each|amount/i },
+  { key: 'unit', label: 'Unit (sheet, box…)', guess: /^(unit|uom|u\/m|per)$/i },
+  { key: 'onHand', label: 'On hand now', guess: /on\s*hand|qty|quantity|stock|count/i },
+  { key: 'reorderPoint', label: 'Reorder at', guess: /reorder|min(imum)?/i },
+  { key: 'orderMultiple', label: 'Order multiple', guess: /multiple|pack|bundle|case/i },
+]
+const num = (v: string | undefined) => { const t = (v ?? '').replace(/[$,\s]/g, ''); if (t === '') return null; const x = Number(t); return isNaN(x) ? NaN : x }
+
+function ImportItems({ supplier, onClose, done }: { supplier: api.InvSupplier; onClose: () => void; done: () => void }) {
   const { toast } = useShell()
-  const [rows, setRows] = useState<api.InvSupplier[]>([])
-  useEffect(() => { api.getInvSuppliers().then(setRows).catch(e => toast((e as Error).message, 'error')) }, [toast])
-  const set = (id: number, patch: Partial<api.InvSupplier>) => setRows(r => r.map(x => x.id === id ? { ...x, ...patch } : x))
-  const save = async (s: api.InvSupplier) => { try { await api.saveInvSupplier(s.id, { email: s.email ?? '', phone: s.phone ?? '', orderNotes: s.orderNotes ?? '' }); toast('Saved.') } catch (e) { toast((e as Error).message, 'error') } }
+  const [table, setTable] = useState<string[][]>([]); const [paste, setPaste] = useState(''); const [map, setMap] = useState<Record<string, number>>({}); const [track, setTrack] = useState(true)
+  const [busy, setBusy] = useState(false); const [result, setResult] = useState<api.InvImportResult | null>(null)
+  const load = (text: string) => {
+    const t = parseCsv(text); setTable(t)
+    const head = t[0] ?? []; const m: Record<string, number> = {}
+    for (const f of FIELDS) { const i = head.findIndex((h, ix) => f.guess.test(h.trim()) && !Object.values(m).includes(ix)); if (i >= 0) m[f.key] = i }
+    setMap(m)
+  }
+  const body = table.slice(1)
+  const rows: api.InvImportRow[] = body.map(r => {
+    const g = (k: string) => map[k] === undefined ? undefined : r[map[k]!]?.trim()
+    return { sku: g('sku') ?? '', description: g('description') || null, cost: num(g('cost')), unit: g('unit') || null, onHand: num(g('onHand')), reorderPoint: num(g('reorderPoint')), orderMultiple: num(g('orderMultiple')) }
+  })
+  const bad = rows.filter(r => !r.sku || [r.cost, r.onHand, r.reorderPoint, r.orderMultiple].some(x => x !== null && x !== undefined && isNaN(x as number)))
+  const good = rows.filter(r => !bad.includes(r))
+  const go = async () => {
+    setBusy(true)
+    try { const r = await api.saveInvSupplierItems(supplier.id, good, track); setResult(r); toast('Imported.'); done() } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+  }
+  return (
+    <Modal title={`Import items from a file — ${supplier.name}`} onClose={onClose} width={860}>
+      <div className="lookup-body">
+        {result ? <>
+          <p><strong>{result.added}</strong> new items, <strong>{result.changed}</strong> changed, {result.unchanged} unchanged{track ? <>, <strong>{result.tracked}</strong> now counted in inventory</> : null}.{result.skipped ? ` ${result.skipped} rows skipped.` : ''}</p>
+          {result.priceChanges > 0 && <p className="muted">{result.priceChanges} selling price changes were proposed from the new costs. Review them under Supplier Pricing → Pending changes; nothing changes until you approve.</p>}
+          <div className="actions"><button className="primary" onClick={onClose}>Done</button></div></> : <>
+          <p>A spreadsheet saved as CSV with a header row. Only the SKU column is required; items you already have are updated by SKU, and an empty cost leaves the old cost alone.</p>
+          <div className="row"><input type="file" accept=".csv,.tsv,.txt,text/csv" onChange={async e => { const f = e.target.files?.[0]; if (f) load(await f.text()) }} />
+            <span className="muted">or paste rows below</span></div>
+          <textarea rows={4} style={{ width: '100%' }} placeholder={'SKU,Description,Cost,Unit\nCL-1/4,Clear 1/4 sheet 60x96,100.00,sheet'} value={paste} onChange={e => { setPaste(e.target.value); load(e.target.value) }} />
+          {table.length > 1 && <>
+            <h4>Which column is which?</h4>
+            <div className="row">{FIELDS.map(f => <label key={f.key}>{f.label} <select value={map[f.key] ?? ''} onChange={e => setMap({ ...map, [f.key]: e.target.value === '' ? undefined! : Number(e.target.value) })}><option value="">(none)</option>{table[0]!.map((h, i) => <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}</select></label>)}</div>
+            <table className="grid-table"><thead><tr><th>SKU</th><th>Description</th><th className="num">Cost</th><th>Unit</th><th className="num">On hand</th><th className="num">Reorder</th><th className="num">Multiple</th></tr></thead>
+              <tbody>{rows.slice(0, 6).map((r, i) => <tr key={i} className={bad.includes(r) ? 'neg' : ''}><td>{r.sku}</td><td>{r.description}</td><td className="num">{r.cost ?? ''}</td><td>{r.unit}</td><td className="num">{r.onHand ?? ''}</td><td className="num">{r.reorderPoint ?? ''}</td><td className="num">{r.orderMultiple ?? ''}</td></tr>)}</tbody></table>
+            <p className="muted small">{good.length} usable rows{bad.length ? `, ${bad.length} will be skipped (no SKU or a bad number; shown in red above if among the first rows)` : ''}.</p>
+            <label className="check"><input type="checkbox" checked={track} onChange={e => setTrack(e.target.checked)} /> Also start counting these in inventory (uses the Unit, On hand, Reorder and Multiple columns when present)</label></>}
+          <div className="actions"><button className="primary" disabled={busy || good.length === 0 || map.sku === undefined} onClick={() => void go()}>{busy ? 'Importing…' : `Import ${good.length} items`}</button><button onClick={onClose}>Cancel</button></div></>}
+      </div>
+    </Modal>)
+}
+
+function SupplierForm({ s, onClose, done }: { s: api.InvSupplier | null; onClose: () => void; done: (id?: number) => void }) {
+  const { toast } = useShell()
+  const [f, setF] = useState({ name: s?.name ?? '', email: s?.email ?? '', phone: s?.phone ?? '', orderNotes: s?.orderNotes ?? '' })
+  const save = async () => {
+    try {
+      if (s) { await api.saveInvSupplier(s.id, f); toast('Saved.'); done() } else { const r = await api.addInvSupplier(f); toast('Supplier added.'); done(r.id) }
+    } catch (e) { toast((e as Error).message, 'error') }
+  }
+  return (
+    <Modal title={s ? `Supplier: ${s.name}` : 'Add a supplier'} onClose={onClose} width={560}>
+      <div className="lookup-body">
+        <div className="row"><label>Name <input autoFocus size={34} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></label></div>
+        <div className="row"><label>Order email <input size={30} value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></label><label>Phone <input size={14} value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} /></label></div>
+        <div className="row"><label>Notes <input size={46} placeholder="account number, delivery instructions…" value={f.orderNotes} onChange={e => setF({ ...f, orderNotes: e.target.value })} /></label></div>
+        <div className="actions"><button className="primary" disabled={!f.name.trim()} onClick={() => void save()}>Save</button><button onClick={onClose}>Cancel</button>
+          {s && <button onClick={async () => { try { await api.saveInvSupplier(s.id, { ...f, active: !s.active }); toast(s.active ? 'Supplier hidden.' : 'Supplier active again.'); done() } catch (e) { toast((e as Error).message, 'error') } }}>{s.active ? 'Hide supplier' : 'Show supplier again'}</button>}</div>
+        <p className="muted small">Feeds and automatic price updates for a supplier are set up under Supplier Pricing.</p>
+      </div>
+    </Modal>)
+}
+
+function SuppliersTab({ bump }: { bump: () => void }) {
+  const { toast } = useShell()
+  const [rows, setRows] = useState<api.InvSupplier[]>([]); const [sel, setSel] = useState<number | null>(null)
+  const [form, setForm] = useState<api.InvSupplier | 'new' | null>(null); const [importing, setImporting] = useState(false)
+  const [items, setItems] = useState<api.InvCatalogRow[]>([]); const [q, setQ] = useState(''); const [tick, setTick] = useState(0)
+  const [it, setIt] = useState({ sku: '', description: '', cost: '', unit: '', track: true })
+  useEffect(() => { api.getInvSuppliers().then(r => { setRows(r); setSel(s => s ?? r.find(x => x.active)?.id ?? null) }).catch(e => toast((e as Error).message, 'error')) }, [tick, toast])
+  const cur = rows.find(r => r.id === sel) ?? null
+  useEffect(() => { if (!sel) { setItems([]); return } const t = setTimeout(() => api.getInvCatalog(q, sel).then(setItems).catch(() => undefined), 200); return () => clearTimeout(t) }, [sel, q, tick])
+  const refresh = () => { setTick(t => t + 1); bump() }
+  const addItem = async () => {
+    const cost = it.cost.trim() === '' ? null : Number(it.cost.replace(/[$,]/g, ''))
+    if (cost !== null && (isNaN(cost) || cost < 0)) { toast('The cost must be a number.', 'error'); return }
+    try { await api.saveInvSupplierItems(cur!.id, [{ sku: it.sku, description: it.description, cost, unit: it.unit }], it.track); toast('Saved.'); setIt({ ...it, sku: '', description: '', cost: '' }); refresh() } catch (e) { toast((e as Error).message, 'error') }
+  }
   return (
     <>
-      <p>Where purchase orders go. The email address fills in the “Email order” button; the notes (account number, delivery instructions) show on the order screen.</p>
-      <table className="grid-table"><thead><tr><th>Supplier</th><th>Order email</th><th>Phone</th><th>Notes</th><th /></tr></thead>
-        <tbody>{rows.map(s => <tr key={s.id}><td>{s.name}</td>
-          <td><input size={26} value={s.email ?? ''} onChange={e => set(s.id, { email: e.target.value })} /></td><td><input size={13} value={s.phone ?? ''} onChange={e => set(s.id, { phone: e.target.value })} /></td>
-          <td><input size={30} value={s.orderNotes ?? ''} onChange={e => set(s.id, { orderNotes: e.target.value })} /></td><td><button onClick={() => void save(s)}>Save</button></td></tr>)}
-          {rows.length === 0 && <tr><td colSpan={5} className="muted">No suppliers yet. Add them under Supplier Pricing.</td></tr>}</tbody></table>
+      <p>Add the companies you buy from, then load their items (SKU, description, cost) by typing them in or importing a spreadsheet. Items you load can be counted in inventory and ordered from here.</p>
+      <div className="row"><button className="primary" onClick={() => setForm('new')}>Add a supplier</button></div>
+      <table className="grid-table"><thead><tr><th>Supplier</th><th>Order email</th><th>Phone</th><th className="num">Items</th><th /></tr></thead>
+        <tbody>{rows.map(s => <tr key={s.id} className={(sel === s.id ? 'sel ' : '') + (!s.active ? 'muted' : '')} onClick={() => setSel(s.id)}><td>{s.name}{!s.active && ' (hidden)'}</td><td>{s.email}</td><td>{s.phone}</td><td className="num">{s.items}</td><td><button onClick={e => { e.stopPropagation(); setForm(s) }}>Edit</button></td></tr>)}
+          {rows.length === 0 && <tr><td colSpan={5} className="muted">No suppliers yet. Choose “Add a supplier”.</td></tr>}</tbody></table>
+      {cur && <fieldset><legend>{cur.name}: items</legend>
+        <div className="row"><label>SKU <input size={14} value={it.sku} onChange={e => setIt({ ...it, sku: e.target.value })} /></label><label>Description <input size={26} value={it.description} onChange={e => setIt({ ...it, description: e.target.value })} /></label>
+          <label>Cost <input size={8} value={it.cost} onChange={e => setIt({ ...it, cost: e.target.value })} /></label><label>Unit <input size={7} placeholder="sheet" value={it.unit} onChange={e => setIt({ ...it, unit: e.target.value })} /></label>
+          <label className="check"><input type="checkbox" checked={it.track} onChange={e => setIt({ ...it, track: e.target.checked })} /> count in inventory</label>
+          <button disabled={!it.sku.trim()} onClick={() => void addItem()}>Add or update item</button><button className="primary" onClick={() => setImporting(true)}>Import items from a file…</button></div>
+        <div className="row"><input className="search" placeholder="Find an item…" value={q} onChange={e => setQ(e.target.value)} /></div>
+        <div className="maint-list" style={{ maxHeight: '16rem' }}><table className="grid-table"><thead><tr><th>SKU</th><th>Description</th><th className="num">Cost</th><th>Counted in inventory</th><th>Linked parts</th></tr></thead>
+          <tbody>{items.map(r => <tr key={r.supplierItemId}><td>{r.sku}</td><td>{r.description}</td><td className="num">{money(r.unitCost)}</td><td>{r.tracked ? `yes (${r.unit ?? 'each'})` : 'no'}</td><td>{r.links ? `${r.links} linked` : 'none'}</td></tr>)}
+            {items.length === 0 && <tr><td colSpan={5} className="muted">No items yet. Add one above or import a file.</td></tr>}</tbody></table></div>
+        <p className="muted small">To have glass and parts used up automatically, link each part and thickness to its item under Supplier Pricing → Cost links.</p>
+      </fieldset>}
+      {form && <SupplierForm s={form === 'new' ? null : form} onClose={() => setForm(null)} done={id => { setForm(null); if (id) setSel(id); refresh() }} />}
+      {importing && cur && <ImportItems supplier={cur} onClose={() => setImporting(false)} done={refresh} />}
     </>)
 }

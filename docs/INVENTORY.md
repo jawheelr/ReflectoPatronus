@@ -13,6 +13,14 @@ While off, the program ignores stock completely: invoices use up nothing, the St
   A line needs `qty x area-or-1 x link factor` of that item (the factor converts our price unit to the supplier's, for example 1/40 for a 60x96 sheet).
   The billed area is used, so the waste allowance you already charge for is counted too. Labor, custom lines and unlinked parts never touch stock.
 
+## Suppliers and their items
+The **Suppliers & items** tab (needs only `inventory.manage`, not the Supplier Pricing permission) is where you add suppliers (name, order email, phone, notes),
+add or update single items (SKU, description, cost, unit), and **import items from a file**: a CSV (comma, tab or semicolon) with a header row, or pasted rows.
+Columns are matched by their headings and can be changed in the dialog; only SKU is required. Items are matched by SKU (case-insensitive) and updated; a blank cost keeps the old cost.
+Optional columns Unit, On hand, Reorder at and Order multiple fill in the inventory settings when "also start counting these" is ticked (items already counted keep their counts).
+Cost changes use the normal supplier pricing path: they are kept in the cost history and may propose selling-price changes under Supplier Pricing > Pending changes for you to approve.
+Feeds and scheduled price updates are still set up in Supplier Pricing.
+
 ## Work orders
 - An **open work order** sets stock aside ("committed", shown in the stock list). Nothing is removed yet.
 - When the work order is turned into an invoice (or a quote straight into one), its stock leaves, once. Editing or crediting the invoice afterwards does not change stock; use a count or adjustment.
